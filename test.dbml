@@ -1,0 +1,8 @@
+Table User {
+    id INT [pk]
+    username VARCHAR(50) [unique, not null]
+    email VARCHAR(100) [not null]
+    password_hash VARCHAR(255) [not null]
+    bio TEXT
+    ...
+}

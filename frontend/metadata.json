@@ -1,0 +1,5 @@
+
+{
+  "name": "DBML Architect AI",
+  "description": "An AI-powered collaborative tool to design database schemas. Describe your application in natural language, and the AI will generate the DBML, which is then visualized. This serves as the foundation for generating DDL and backend code."
+}
