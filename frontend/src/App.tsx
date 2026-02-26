@@ -35,6 +35,8 @@ export default function App() {
   const [savedDbmlCode, setSavedDbmlCode] = useState<string>('');
   const [isComparingCode, setIsComparingCode] = useState(false);
   const [savedJavaCode, setSavedJavaCode] = useState<string>('');
+  const [oldJavaCode, setOldJavaCode] = useState<string>('');
+  const [newJavaCode, setNewJavaCode] = useState<string>('');
   
   const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode } = useBackend();
 
@@ -110,6 +112,7 @@ export default function App() {
     
     setIsComparingCode(true);
     setIsDiffModalOpen(true);
+    setOldJavaCode(savedJavaCode);
     
     // Regenerate DBML from requirements
     const response = await generateDbml(requirements, projectName || 'Comparison');
@@ -119,10 +122,11 @@ export default function App() {
       // Generate new Java code from new DBML
       const newFiles = await generateSpringBootCode(newDbmlCode);
       if (newFiles) {
-        const newJavaCode = newFiles.map(f => `// File: ${f.fileName}\n${f.content}`).join('\n\n');
+        const newCodeStr = newFiles.map(f => `// File: ${f.fileName}\n${f.content}`).join('\n\n');
+        setNewJavaCode(newCodeStr);
         
         // Compare old vs new Java code
-        const changes = await compareCode(savedJavaCode, newJavaCode);
+        const changes = await compareCode(savedJavaCode, newCodeStr);
         if (changes) {
           setDiffChanges(changes);
         }
@@ -223,6 +227,8 @@ export default function App() {
         onClose={() => setIsDiffModalOpen(false)}
         changes={diffChanges}
         isLoading={isComparingCode}
+        oldCode={oldJavaCode}
+        newCode={newJavaCode}
       />
       <Header 
         onGenerate={handleGenerate} 
