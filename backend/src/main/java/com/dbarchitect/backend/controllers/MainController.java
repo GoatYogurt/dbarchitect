@@ -1,7 +1,10 @@
 package com.dbarchitect.backend.controllers;
 
+import com.dbarchitect.backend.entities.CodeChange;
 import com.dbarchitect.backend.entities.FileNode;
+import com.dbarchitect.backend.requests.CompareRequest;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
+import com.dbarchitect.backend.requests.UpdateDbmlRequest;
 import com.dbarchitect.backend.responses.DesignProjectResponse;
 import com.dbarchitect.backend.services.MainService;
 import com.dbarchitect.backend.utils.DBMLCode;
@@ -11,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.validation.constraints.NotNull;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("")
@@ -25,6 +30,19 @@ public class MainController {
     @PostMapping("/generate-dbml")
     public DesignProjectResponse generateDbml(@RequestBody GenerateDBMLRequest request) {
         return mainService.generateDbml(request);
+    }
+
+    @PutMapping("/projects/{id}/dbml")
+    public ResponseEntity<DesignProjectResponse> updateProjectDbml(@PathVariable Long id, @RequestBody UpdateDbmlRequest request) {
+        var updated = mainService.updateProjectDbml(id, request.getRawDbmlCode());
+        if (updated == null) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        DesignProjectResponse response = new DesignProjectResponse();
+        response.setProjectId(updated.getId());
+        response.setProjectName(updated.getName());
+        response.setCleanDbmlCode(DBMLCode.extractCleanDbmlCode(updated.getRawDbmlCode()));
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     @GetMapping("/generate-code")
@@ -77,5 +95,12 @@ public class MainController {
             responses.add(response);
         }
         return responses;
+    }
+
+    @PostMapping("/compare")
+    public ResponseEntity<List<CodeChange>> getDiff(@RequestBody CompareRequest req) {
+        // req chứa oldCode và newCode
+        List<CodeChange> diffResults = mainService.compareCode(req.getOldCode(), req.getNewCode());
+        return ResponseEntity.ok(diffResults);
     }
 }

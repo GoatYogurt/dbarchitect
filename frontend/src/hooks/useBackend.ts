@@ -11,6 +11,7 @@ export function useBackend() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCodeLoading, setIsCodeLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isDbmlUpdating, setIsDbmlUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastProjectId, setLastProjectId] = useState<number | null>(() => {
     const stored = localStorage.getItem('projectId');
@@ -268,5 +269,31 @@ export function useBackend() {
     }
   }, []);
 
-  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview };
+  const updateDbml = useCallback(async (projectId: number, dbmlCode: string): Promise<boolean> => {
+    setIsDbmlUpdating(true);
+    setError(null);
+    try {
+      const wrappedDbmlCode = `\`\`\`dbml\n${dbmlCode}\n\`\`\``;
+      const response = await fetch(`${BASE_URL}/projects/${projectId}/dbml`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawDbmlCode: wrappedDbmlCode }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Backend error: ${response.status}`);
+      }
+
+      return true;
+    } catch (e: any) {
+      console.error('Update DBML Error:', e);
+      setError(e.message || 'Failed to update DBML code.');
+      return false;
+    } finally {
+      setIsDbmlUpdating(false);
+    }
+  }, []);
+
+  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml };
 }

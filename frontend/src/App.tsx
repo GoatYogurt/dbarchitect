@@ -30,7 +30,7 @@ export default function App() {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState<FileNode | null>(null);
   
-  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview } = useBackend();
+  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml } = useBackend();
 
   const handleGenerate = useCallback(async () => {
     const response = await generateDbml(requirements, projectName);
@@ -83,6 +83,16 @@ export default function App() {
       setIsPreviewModalOpen(true);
     }
   }, [selectedProjectId, generatePreview]);
+
+  const handleSaveDbml = useCallback(async () => {
+    if (!selectedProjectId || !dbmlCode) return;
+    
+    const success = await updateDbml(selectedProjectId, dbmlCode);
+    if (success) {
+      // Optionally show a success message
+      console.log('DBML updated successfully');
+    }
+  }, [selectedProjectId, dbmlCode, updateDbml]);
 
   useEffect(() => {
     try {
@@ -200,7 +210,13 @@ export default function App() {
             />
           )}
         </div>
-        <DbmlEditor value={dbmlCode} onChange={setDbmlCode} />
+        <DbmlEditor 
+          value={dbmlCode} 
+          onChange={setDbmlCode}
+          onSave={handleSaveDbml}
+          isSaving={isDbmlUpdating}
+          canSave={!!selectedProjectId && !!dbmlCode}
+        />
         <SchemaVisualizer schema={parsedSchema} />
       </main>
     </div>

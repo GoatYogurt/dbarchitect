@@ -1,5 +1,6 @@
 package com.dbarchitect.backend.services;
 
+import com.dbarchitect.backend.entities.CodeChange;
 import com.dbarchitect.backend.entities.DesignProject;
 import com.dbarchitect.backend.entities.FileNode;
 import com.dbarchitect.backend.repositories.DesignProjectRepository;
@@ -8,11 +9,16 @@ import com.dbarchitect.backend.responses.DesignProjectResponse;
 import com.dbarchitect.backend.utils.CodeGenerator;
 import com.dbarchitect.backend.utils.DBMLCode;
 import com.dbarchitect.backend.utils.ProjectTreeBuilder;
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import org.springframework.stereotype.Service;
 import com.dbarchitect.backend.utils.DBMLGenerator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MainService {
@@ -87,6 +93,16 @@ public class MainService {
         return designProjectRepository.findById(projectId).orElse(null);
     }
 
+    public DesignProject updateProjectDbml(Long projectId, String rawDbmlCode) {
+        var projectOpt = designProjectRepository.findById(projectId);
+        if (projectOpt.isEmpty()) return null;
+        DesignProject project = projectOpt.get();
+        project.setRawDbmlCode(rawDbmlCode);
+        // Optionally update status or record a change; for now we just save
+        designProjectRepository.save(project);
+        return project;
+    }
+
     public List<DesignProject> getAllDesignProjects() {
         return designProjectRepository.findAll();
     }
@@ -100,5 +116,47 @@ public class MainService {
         if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yaml";
         if (lower.endsWith(".json")) return "json";
         return "text";
+    }
+
+    public List<CodeChange> compareCode(String oldSource, String newSource) {
+        List<CodeChange> changes = new ArrayList<>();
+
+        // 1. Parse chuỗi String thành Cây AST
+        CompilationUnit cuOld = StaticJavaParser.parse(oldSource);
+        CompilationUnit cuNew = StaticJavaParser.parse(newSource);
+
+        // 2. Trích xuất các Fields (Thuộc tính) thành Map để dễ so sánh
+        Map<String, String> fieldsOld = extractFields(cuOld);
+        Map<String, String> fieldsNew = extractFields(cuNew);
+
+        // 3. So sánh: Tìm cái mới thêm hoặc bị sửa
+        fieldsNew.forEach((name, type) -> {
+            if (!fieldsOld.containsKey(name)) {
+                changes.add(new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type));
+            } else if (!fieldsOld.get(name).equals(type)) {
+                changes.add(new CodeChange(name, "FIELD", "MODIFIED",
+                        "Đổi từ " + fieldsOld.get(name) + " sang " + type));
+            }
+        });
+
+        // 4. So sánh: Tìm cái bị xóa
+        fieldsOld.keySet().forEach(name -> {
+            if (!fieldsNew.containsKey(name)) {
+                changes.add(new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này"));
+            }
+        });
+
+        return changes;
+    }
+
+    private Map<String, String> extractFields(CompilationUnit cu) {
+        Map<String, String> fieldMap = new HashMap<>();
+        // Tìm tất cả các khai báo biến trong Class
+        cu.findAll(FieldDeclaration.class).forEach(f -> {
+            f.getVariables().forEach(v -> {
+                fieldMap.put(v.getNameAsString(), v.getTypeAsString());
+            });
+        });
+        return fieldMap;
     }
 }
