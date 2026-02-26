@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { GEMINI_MODEL } from '../constants';
-import { GeneratedFile, GenerateDbmlResponse, Project } from '../types';
+import { GeneratedFile, GenerateDbmlResponse, Project, FileNode } from '../types';
 
 const API_KEY = process.env.API_KEY;
 const BASE_URL = 'http://localhost:8080';
@@ -10,6 +10,7 @@ const BASE_URL = 'http://localhost:8080';
 export function useBackend() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCodeLoading, setIsCodeLoading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastProjectId, setLastProjectId] = useState<number | null>(() => {
     const stored = localStorage.getItem('projectId');
@@ -242,5 +243,30 @@ export function useBackend() {
     }
   }, []);
 
-  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode };
+  const generatePreview = useCallback(async (projectId: number): Promise<FileNode | null> => {
+    setIsPreviewLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${BASE_URL}/generate-preview?id=${projectId}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Backend error: ${response.status}`);
+      }
+
+      const fileNode: FileNode = await response.json();
+      return fileNode;
+    } catch (e: any) {
+      console.error('Generate Preview Error:', e);
+      setError(e.message || 'Failed to generate preview.');
+      return null;
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, []);
+
+  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview };
 }

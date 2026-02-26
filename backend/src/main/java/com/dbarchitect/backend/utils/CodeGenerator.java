@@ -210,6 +210,29 @@ public class CodeGenerator {
         return baos.toByteArray();
     }
 
+    // Hàm phụ trợ để render nhanh
+    private GeneratedFile renderFile(String templateName, Map<String, Object> model, String path) throws Exception {
+        Template template = freemarkerConfig.getTemplate(templateName);
+        String code = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
+        return new GeneratedFile(path, code);
+    }
+
+    /**
+     * Public helper to generate a simplified list of files (path + content) from DBML content.
+     * This wrapper exists so callers outside this class don't need to reference the private GeneratedFile record.
+     */
+    public List<java.util.Map<String, String>> generateFilesFromDbml(String dbmlContent) throws Exception {
+        List<GeneratedFile> files = generateAllSourceFiles(dbmlContent);
+        List<java.util.Map<String, String>> out = new ArrayList<>();
+        for (GeneratedFile f : files) {
+            java.util.Map<String, String> m = new HashMap<>();
+            m.put("path", f.path());
+            m.put("content", f.content());
+            out.add(m);
+        }
+        return out;
+    }
+
     // Thêm record phụ trợ bên trong hoặc ngoài class
     private record GeneratedFile(String path, String content) {}
 
@@ -235,12 +258,5 @@ public class CodeGenerator {
             files.add(renderFile("controller.ftl", dataModel, "controller/" + className + "Controller.java"));
         }
         return files;
-    }
-
-    // Hàm phụ trợ để render nhanh
-    private GeneratedFile renderFile(String templateName, Map<String, Object> model, String path) throws Exception {
-        Template template = freemarkerConfig.getTemplate(templateName);
-        String code = FreeMarkerTemplateUtils.processTemplateIntoString(template, model);
-        return new GeneratedFile(path, code);
     }
 }

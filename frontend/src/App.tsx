@@ -6,12 +6,13 @@ import { DbmlEditor } from './components/DbmlEditor';
 import { SchemaVisualizer } from './components/SchemaVisualizer';
 import { useBackend } from './hooks/useBackend';
 import { parseDBML } from './services/dbmlParser';
-import { ParsedSchema, GeneratedFile, Project } from './types';
+import { ParsedSchema, GeneratedFile, Project, FileNode } from './types';
 // import { SAMPLE_REQUIREMENTS } from './constants';
 import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
 import { ProjectSelector } from './components/ProjectSelector';
+import { FilePreviewModal } from './components/FilePreviewModal';
 
 export default function App() {
   // const [requirements, setRequirements] = useState<string>(SAMPLE_REQUIREMENTS);
@@ -26,8 +27,10 @@ export default function App() {
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<FileNode | null>(null);
   
-  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, error, fetchProjects, fetchProjectById, downloadGeneratedCode } = useBackend();
+  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview } = useBackend();
 
   const handleGenerate = useCallback(async () => {
     const response = await generateDbml(requirements, projectName);
@@ -70,6 +73,16 @@ export default function App() {
       setIsDownloadPopupOpen(false);
     }
   }, [selectedProjectId, dbmlCode, downloadGeneratedCode]);
+
+  const handlePreview = useCallback(async () => {
+    if (!selectedProjectId) return;
+    
+    const data = await generatePreview(selectedProjectId);
+    if (data) {
+      setPreviewData(data);
+      setIsPreviewModalOpen(true);
+    }
+  }, [selectedProjectId, generatePreview]);
 
   useEffect(() => {
     try {
@@ -152,12 +165,19 @@ export default function App() {
         isGenerating={isDownloading}
         isSuccess={downloadSuccess}
       />
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
+        fileNode={previewData}
+      />
       <Header 
         onGenerate={handleGenerate} 
         onGenerateCode={handleGenerateCode}
         onDownloadCode={handleDownloadCode}
+        onPreview={handlePreview}
         isLoading={isLoading}
         isCodeLoading={isCodeLoading}
+        isPreviewLoading={isPreviewLoading}
         dbmlCode={dbmlCode}
         hasProjectId={!!selectedProjectId}
       />

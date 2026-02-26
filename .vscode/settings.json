@@ -1,4 +1,5 @@
 {
     "codesnap.showLineNumbers": true,
-    "editor.lineHeight": 0
+    "editor.lineHeight": 0,
+    "java.compile.nullAnalysis.mode": "disabled"
 }

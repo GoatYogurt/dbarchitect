@@ -38,3 +38,21 @@ export interface Project {
   projectName: string;
   cleanDbmlCode: string;
 }
+
+export interface FileNode {
+  name: string;
+  type: 'folder' | 'file';
+  path: string;
+  children: FileNode[];
+  content?: string | null;
+  language?: string | null;
+}
+
+export interface PreviewResponse {
+  name: string;
+  type: 'folder' | 'file';
+  path: string;
+  children: FileNode[];
+  content?: string | null;
+  language?: string | null;
+}
