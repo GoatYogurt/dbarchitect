@@ -1,10 +1,8 @@
 
 import { useState, useCallback } from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GeneratedFile, GenerateDbmlResponse, Project, FileNode, CodeChange } from '../types';
 import { GEMINI_MODEL } from '../constants';
-import { GeneratedFile, GenerateDbmlResponse, Project, FileNode } from '../types';
 
-const API_KEY = process.env.API_KEY;
 const BASE_URL = 'http://localhost:8080';
 // const BASE_URL = "https://x7nbr74s-8080.asse.devtunnels.ms"
 export function useBackend() {
@@ -74,10 +72,6 @@ export function useBackend() {
   }, []);
 
   const generateSpringBootCode = useCallback(async (dbmlCode: string): Promise<GeneratedFile[] | null> => {
-    if (!API_KEY) {
-      setError('API key is not configured.');
-      return null;
-    }
     if (!dbmlCode.trim()) {
       setError('DBML code cannot be empty.');
       return null;
@@ -87,74 +81,33 @@ export function useBackend() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: API_KEY, vertexai: true });
-      const prompt = `
-        You are an expert Java Spring Boot developer. Given the following DBML schema, generate a complete set of backend files for a Spring Boot application using Java 17+.
-
-        **DBML Schema:**
-        \`\`\`dbml
-        ${dbmlCode}
-        \`\`\`
-
-        **Instructions:**
-        1.  For each table in the DBML, generate four corresponding Java files:
-            a.  **JPA Entity:** A \`.java\` file in \`com.example.app.model\`. Use \`jakarta.persistence.*\` annotations. Include standard annotations like \`@Entity\`, \`@Table\`, \`@Id\`, \`@GeneratedValue\`, \`@Column\`, and relationship annotations (\`@ManyToOne\`, \`@OneToMany\`, \`@ManyToMany\`). Implement relationships correctly based on the 'Ref' definitions.
-            b.  **JPA Repository:** A \`.java\` interface in \`com.example.app.repository\` that extends \`JpaRepository\`.
-            c.  **DTO (Data Transfer Object):** A simple \`.java\` record or class in \`com.example.app.dto\` to represent the entity for API communication.
-            d.  **REST Controller:** A \`.java\` class in \`com.example.app.controller\` with the \`@RestController\` annotation. Provide skeleton CRUD endpoints (\`@GetMapping\`, \`@PostMapping\`, \`@PutMapping\`, \`@DeleteMapping\`) using the repository and DTOs.
-        2.  Follow Java naming conventions (PascalCase for classes, camelCase for fields).
-        3.  Ensure all generated code is complete, syntactically correct, and includes necessary imports.
-        4.  The output must be a JSON object containing an array of file objects.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: { role: 'user', parts: [{ text: prompt }] },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              files: {
-                type: Type.ARRAY,
-                description: "An array of generated Java files.",
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    fileName: {
-                      type: Type.STRING,
-                      description: "The full path of the file, e.g., src/main/java/com/example/app/model/User.java"
-                    },
-                    content: {
-                      type: Type.STRING,
-                      description: "The complete Java code for the file."
-                    }
-                  },
-                  required: ['fileName', 'content']
-                }
-              }
-            },
-            required: ['files']
-          },
-          temperature: 0.3,
-        }
+      const response = await fetch(`${BASE_URL}/generate-java-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawDbmlCode: dbmlCode }),
       });
-      
-      if (!response.text) {
-        throw new Error('Empty response from AI.');
-      }
-      
-      const jsonString = response.text.trim();
-      const result = JSON.parse(jsonString);
 
-      if (result && Array.isArray(result.files)) {
-        return result.files;
-      } else {
-        throw new Error('Invalid code generation response from AI.');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Backend error: ${response.status}`);
       }
 
+      const files: Array<{ path: string; content: string }> = await response.json();
+      
+      if (!Array.isArray(files) || files.length === 0) {
+        setError('No files generated from DBML.');
+        return null;
+      }
+
+      // Convert backend format to GeneratedFile[]
+      const generatedFiles: GeneratedFile[] = files.map(f => ({
+        fileName: f.path,
+        content: f.content,
+      }));
+
+      return generatedFiles;
     } catch (e: any) {
-      console.error('Gemini Code Generation Error:', e);
+      console.error('Java Code Generation Error:', e);
       setError(e.message || 'An unknown error occurred during code generation.');
       return null;
     } finally {
@@ -295,5 +248,35 @@ export function useBackend() {
     }
   }, []);
 
-  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml };
+  const compareCode = useCallback(async (oldCode: string, newCode: string): Promise<CodeChange[] | null> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Strip backticks from DBML code before sending to backend
+      const cleanOldCode = oldCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
+      const cleanNewCode = newCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
+
+      const response = await fetch(`${BASE_URL}/compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldCode: cleanOldCode, newCode: cleanNewCode }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Backend error: ${response.status}`);
+      }
+
+      const changes: CodeChange[] = await response.json();
+      return changes;
+    } catch (e: any) {
+      console.error('Compare Code Error:', e);
+      setError(e.message || 'Failed to compare code.');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode };
 }

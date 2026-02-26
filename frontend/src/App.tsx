@@ -6,13 +6,14 @@ import { DbmlEditor } from './components/DbmlEditor';
 import { SchemaVisualizer } from './components/SchemaVisualizer';
 import { useBackend } from './hooks/useBackend';
 import { parseDBML } from './services/dbmlParser';
-import { ParsedSchema, GeneratedFile, Project, FileNode } from './types';
+import { ParsedSchema, GeneratedFile, Project, FileNode, CodeChange } from './types';
 // import { SAMPLE_REQUIREMENTS } from './constants';
 import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
 import { ProjectSelector } from './components/ProjectSelector';
 import { FilePreviewModal } from './components/FilePreviewModal';
+import { CodeDiffModal } from './components/CodeDiffModal';
 
 export default function App() {
   // const [requirements, setRequirements] = useState<string>(SAMPLE_REQUIREMENTS);
@@ -29,8 +30,13 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState<FileNode | null>(null);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
+  const [diffChanges, setDiffChanges] = useState<CodeChange[] | null>(null);
+  const [savedDbmlCode, setSavedDbmlCode] = useState<string>('');
+  const [isComparingCode, setIsComparingCode] = useState(false);
+  const [savedJavaCode, setSavedJavaCode] = useState<string>('');
   
-  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml } = useBackend();
+  const { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode } = useBackend();
 
   const handleGenerate = useCallback(async () => {
     const response = await generateDbml(requirements, projectName);
@@ -50,6 +56,9 @@ export default function App() {
     const files = await generateSpringBootCode(dbmlCode);
     if (files) {
       setGeneratedCode(files);
+      // Save the generated Java code for comparison
+      const concatenatedCode = files.map(f => `// File: ${f.fileName}\n${f.content}`).join('\n\n');
+      setSavedJavaCode(concatenatedCode);
       setIsCodeModalOpen(true);
     }
   }, [dbmlCode, generateSpringBootCode]);
@@ -93,6 +102,35 @@ export default function App() {
       console.log('DBML updated successfully');
     }
   }, [selectedProjectId, dbmlCode, updateDbml]);
+
+  const handleCompareCode = useCallback(async () => {
+    if (!savedJavaCode || !requirements.trim()) {
+      return;
+    }
+    
+    setIsComparingCode(true);
+    setIsDiffModalOpen(true);
+    
+    // Regenerate DBML from requirements
+    const response = await generateDbml(requirements, projectName || 'Comparison');
+    if (response) {
+      const newDbmlCode = response.cleanDbmlCode;
+      
+      // Generate new Java code from new DBML
+      const newFiles = await generateSpringBootCode(newDbmlCode);
+      if (newFiles) {
+        const newJavaCode = newFiles.map(f => `// File: ${f.fileName}\n${f.content}`).join('\n\n');
+        
+        // Compare old vs new Java code
+        const changes = await compareCode(savedJavaCode, newJavaCode);
+        if (changes) {
+          setDiffChanges(changes);
+        }
+      }
+    }
+    
+    setIsComparingCode(false);
+  }, [savedJavaCode, requirements, projectName, generateDbml, generateSpringBootCode, compareCode]);
 
   useEffect(() => {
     try {
@@ -180,6 +218,12 @@ export default function App() {
         onClose={() => setIsPreviewModalOpen(false)}
         fileNode={previewData}
       />
+      <CodeDiffModal
+        isOpen={isDiffModalOpen}
+        onClose={() => setIsDiffModalOpen(false)}
+        changes={diffChanges}
+        isLoading={isComparingCode}
+      />
       <Header 
         onGenerate={handleGenerate} 
         onGenerateCode={handleGenerateCode}
@@ -200,22 +244,23 @@ export default function App() {
             onRefresh={handleRefreshProjects}
             isLoading={isLoading}
           />
-          {!selectedProjectId && (
-            <RequirementsEditor
-              value={requirements}
-              onChange={setRequirements}
-              projectName={projectName}
-              onProjectNameChange={setProjectName}
-              error={error}
-            />
-          )}
+          <RequirementsEditor
+            value={requirements}
+            onChange={setRequirements}
+            projectName={projectName}
+            onProjectNameChange={setProjectName}
+            error={error}
+          />
         </div>
         <DbmlEditor 
           value={dbmlCode} 
           onChange={setDbmlCode}
           onSave={handleSaveDbml}
+          onCompare={handleCompareCode}
           isSaving={isDbmlUpdating}
+          isComparing={isComparingCode}
           canSave={!!selectedProjectId && !!dbmlCode}
+          canCompare={!!savedJavaCode && !!requirements}
         />
         <SchemaVisualizer schema={parsedSchema} />
       </main>

@@ -10,6 +10,7 @@ import com.dbarchitect.backend.utils.CodeGenerator;
 import com.dbarchitect.backend.utils.DBMLCode;
 import com.dbarchitect.backend.utils.ProjectTreeBuilder;
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.Collections;
 
 @Service
 public class MainService {
@@ -121,13 +125,13 @@ public class MainService {
     public List<CodeChange> compareCode(String oldSource, String newSource) {
         List<CodeChange> changes = new ArrayList<>();
 
-        // 1. Parse chuỗi String thành Cây AST
-        CompilationUnit cuOld = StaticJavaParser.parse(oldSource);
-        CompilationUnit cuNew = StaticJavaParser.parse(newSource);
+        // Parse possibly-multiple compilation units from each source
+        List<CompilationUnit> cusOld = parsePossiblyMultiple(oldSource);
+        List<CompilationUnit> cusNew = parsePossiblyMultiple(newSource);
 
-        // 2. Trích xuất các Fields (Thuộc tính) thành Map để dễ so sánh
-        Map<String, String> fieldsOld = extractFields(cuOld);
-        Map<String, String> fieldsNew = extractFields(cuNew);
+        // Extract fields from all compilation units
+        Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
+        Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
 
         // 3. So sánh: Tìm cái mới thêm hoặc bị sửa
         fieldsNew.forEach((name, type) -> {
@@ -149,14 +153,57 @@ public class MainService {
         return changes;
     }
 
-    private Map<String, String> extractFields(CompilationUnit cu) {
+    // Try to parse the provided source string into one or more CompilationUnits.
+    // If parsing the whole string fails (e.g., it contains multiple concatenated files),
+    // split by top-level `package` declarations and parse each piece separately.
+    private List<CompilationUnit> parsePossiblyMultiple(String source) {
+        if (source == null || source.trim().isEmpty()) return Collections.emptyList();
+
+        // First, try parsing as a single compilation unit
+        try {
+            return Collections.singletonList(StaticJavaParser.parse(source));
+        } catch (ParseProblemException ex) {
+            // Fallback: split by package declarations (keep the 'package' keyword with lookahead)
+            String[] parts = source.split("(?m)(?=^\\s*package\\b)");
+            List<CompilationUnit> result = new ArrayList<>();
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (trimmed.isEmpty()) continue;
+                try {
+                    result.add(StaticJavaParser.parse(part));
+                } catch (ParseProblemException ex2) {
+                    // As a last resort, try trimming trailing content after the last top-level '}'
+                    int lastBrace = part.lastIndexOf('}');
+                    if (lastBrace > 0) {
+                        String maybe = part.substring(0, lastBrace + 1);
+                        try {
+                            result.add(StaticJavaParser.parse(maybe));
+                            continue;
+                        } catch (ParseProblemException ignored) {
+                            // ignore and skip this part
+                        }
+                    }
+                    // skip this part if still unparseable
+                }
+            }
+            return result;
+        }
+    }
+
+    private Map<String, String> extractFieldsFromCus(List<CompilationUnit> cus) {
         Map<String, String> fieldMap = new HashMap<>();
-        // Tìm tất cả các khai báo biến trong Class
-        cu.findAll(FieldDeclaration.class).forEach(f -> {
-            f.getVariables().forEach(v -> {
-                fieldMap.put(v.getNameAsString(), v.getTypeAsString());
+        for (CompilationUnit cu : cus) {
+            if (cu == null) continue;
+            cu.findAll(FieldDeclaration.class).forEach(f -> {
+                f.getVariables().forEach(v -> {
+                    fieldMap.put(v.getNameAsString(), v.getTypeAsString());
+                });
             });
-        });
+        }
         return fieldMap;
+    }
+
+    public List<Map<String, String>> generateFilesFromDbml(String cleanDbml) throws Exception {
+        return codeGenerator.generateFilesFromDbml(cleanDbml);
     }
 }

@@ -5,6 +5,7 @@ import com.dbarchitect.backend.entities.FileNode;
 import com.dbarchitect.backend.requests.CompareRequest;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
 import com.dbarchitect.backend.requests.UpdateDbmlRequest;
+import com.dbarchitect.backend.requests.GenerateCodeRequest;
 import com.dbarchitect.backend.responses.DesignProjectResponse;
 import com.dbarchitect.backend.services.MainService;
 import com.dbarchitect.backend.utils.DBMLCode;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("")
@@ -102,5 +104,17 @@ public class MainController {
         // req chứa oldCode và newCode
         List<CodeChange> diffResults = mainService.compareCode(req.getOldCode(), req.getNewCode());
         return ResponseEntity.ok(diffResults);
+    }
+
+    @PostMapping("/generate-java-code")
+    public ResponseEntity<List<Map<String, String>>> generateJavaCode(@RequestBody GenerateCodeRequest request) {
+        try {
+            String cleanDbml = DBMLCode.extractCleanDbmlCode(request.getRawDbmlCode());
+            List<Map<String, String>> files = mainService.generateFilesFromDbml(cleanDbml);
+            return ResponseEntity.ok(files);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 }
