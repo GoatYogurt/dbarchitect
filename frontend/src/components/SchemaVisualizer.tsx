@@ -469,7 +469,7 @@ export function SchemaVisualizer({ schema }: SchemaVisualizerProps) {
           </ModeButton>
         </ModeToggle>
       </div>
-      <div className="p-4 overflow-y-auto flex-grow">
+      <div className="p-4 overflow-y-auto flex-grow min-h-0">
         {tables.length === 0 && refs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-500">
             <p>Schema visualization will appear here.</p>
@@ -502,7 +502,7 @@ export function SchemaVisualizer({ schema }: SchemaVisualizerProps) {
             )}
           </div>
         ) : (
-          <CanvasContainer ref={canvasRef} style={{ height: '600px' }}>
+          <CanvasContainer ref={canvasRef} style={{ height: '100%', minHeight: '720px' }}>
             <EdgeMarkerDefs />
             {!presentationMode && (
               <CanvasActions data-canvas-actions>

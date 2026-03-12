@@ -228,11 +228,11 @@ export default function App() {
 
         {currentStep === 2 && (
           <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-            <div className="min-h-0 grid grid-cols-1 gap-4 overflow-auto px-6 pt-2 pb-4 xl:grid-cols-[1.35fr,1fr] xl:overflow-hidden">
-              <div className="min-h-[60vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
+            <div className="min-h-0 grid grid-cols-1 gap-4 overflow-auto px-6 pt-2 pb-4 xl:grid-cols-[0.9fr,1.45fr] xl:overflow-hidden">
+              <div className="min-h-[50vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
                 <DbmlEditor value={dbmlCode} onChange={setDbmlCode} />
               </div>
-              <div className="min-h-[60vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
+              <div className="min-h-[70vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
                 <SchemaVisualizer schema={parsedSchema} />
               </div>
             </div>
