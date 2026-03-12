@@ -92,8 +92,8 @@ public class DBMLGenerator {
             Table User {
               id INT [pk]
               username VARCHAR(50) [unique, not null]
-              created_at DATETIME [default: `now()`]
-              updated_at DATETIME [default: `now()`]
+              created_at DATETIME [default: 'now()']
+              updated_at DATETIME [default: 'now()']
               deleted_at DATETIME [null]
               ...
             }

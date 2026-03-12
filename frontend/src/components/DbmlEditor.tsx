@@ -2,6 +2,8 @@
 import React from 'react';
 import Editor from '@monaco-editor/react';
 import { CodeIcon } from './icons';
+import { registerDBMLLanguage } from '../languages/dbml';
+import { Monaco } from '@monaco-editor/react';
 
 interface DbmlEditorProps {
   value: string;
@@ -15,6 +17,10 @@ interface DbmlEditorProps {
 }
 
 export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = false, isComparing = false, canSave = false, canCompare = false }: DbmlEditorProps) {
+  const handleBeforeMount = (monaco: Monaco) => {
+    registerDBMLLanguage(monaco);
+  };
+
   return (
     <div className="h-full bg-slate-800 rounded-lg shadow-inner flex flex-col overflow-hidden border border-slate-700">
       <div className="flex items-center gap-2 p-3 bg-slate-900/50 border-b border-slate-700">
@@ -74,10 +80,11 @@ export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = fals
       <div className="relative flex-grow min-h-0">
         <Editor
           height="100%"
-          defaultLanguage="sql"
+          defaultLanguage="dbml"
           value={value}
           onChange={(nextValue) => onChange(nextValue ?? '')}
           theme="vs-dark"
+          beforeMount={handleBeforeMount}
           options={{
             minimap: { enabled: false },
             fontSize: 13,
