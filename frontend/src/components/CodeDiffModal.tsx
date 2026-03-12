@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CodeChange } from '../types';
 
 interface CodeDiffModalProps {
@@ -9,6 +9,29 @@ interface CodeDiffModalProps {
   oldCode?: string;
   newCode?: string;
 }
+
+interface ParsedFile {
+  fileName: string;
+  content: string;
+}
+
+// Parse concatenated code by file comments
+const parseFiles = (code: string): Map<string, string> => {
+  const files = new Map<string, string>();
+  if (!code.trim()) return files;
+
+  // Match "// File: <filename>" followed by code until next file comment or end
+  const filePattern = /\/\/ File: (.+?)\n([\s\S]*?)(?=\/\/ File:|$)/g;
+  let match;
+
+  while ((match = filePattern.exec(code)) !== null) {
+    const fileName = match[1].trim();
+    const content = match[2].trim();
+    files.set(fileName, content);
+  }
+
+  return files;
+};
 
 const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, index }) => {
   const getActionClassName = (action: string) => {
@@ -87,7 +110,30 @@ const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, ind
 
 export function CodeDiffModal({ isOpen, onClose, changes, isLoading = false, oldCode = '', newCode = '' }: CodeDiffModalProps) {
   const [viewMode, setViewMode] = useState<'diff' | 'code'>('diff');
-  
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+
+  // Parse files from concatenated code
+  const oldFiles = useMemo(() => parseFiles(oldCode), [oldCode]);
+  const newFiles = useMemo(() => parseFiles(newCode), [newCode]);
+
+  // Get all unique file names (union of both old and new)
+  const allFileNames = useMemo(() => {
+    const names = new Set<string>();
+    oldFiles.forEach((_, fileName) => names.add(fileName));
+    newFiles.forEach((_, fileName) => names.add(fileName));
+    return Array.from(names).sort();
+  }, [oldFiles, newFiles]);
+
+  // Set default selected file if not set yet using useEffect
+  useEffect(() => {
+    if (!selectedFile && allFileNames.length > 0) {
+      setSelectedFile(allFileNames[0]);
+    }
+  }, [allFileNames, selectedFile]);
+
+  const currentOldCode = selectedFile ? (oldFiles.get(selectedFile) || '') : '';
+  const currentNewCode = selectedFile ? (newFiles.get(selectedFile) || '') : '';
+
   if (!isOpen) return null;
 
   const hasChanges = changes && changes.length > 0;
@@ -178,25 +224,66 @@ export function CodeDiffModal({ isOpen, onClose, changes, isLoading = false, old
             </>
           ) : (
             // Side-by-Side Code View
-            <div className="grid grid-cols-2 gap-1 h-full">
-              {/* Old Code */}
-              <div className="flex flex-col overflow-hidden border-r border-slate-700">
-                <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
-                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Old Code</h3>
+            <div className="flex flex-col h-full">
+              {/* File Selector */}
+              {allFileNames.length > 0 && (
+                <div className="flex-shrink-0 px-6 py-3 border-b border-slate-700 bg-slate-900/50 overflow-x-auto">
+                  <div className="flex gap-2">
+                    {allFileNames.map(fileName => (
+                      <button
+                        key={fileName}
+                        onClick={() => setSelectedFile(fileName)}
+                        className={`px-3 py-1 text-xs font-mono rounded whitespace-nowrap transition-colors ${
+                          selectedFile === fileName
+                            ? 'bg-cyan-500 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                        title={fileName}
+                      >
+                        {fileName.split('/').pop()}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
-                  <code>{oldCode || 'No code available'}</code>
-                </pre>
-              </div>
+              )}
 
-              {/* New Code */}
-              <div className="flex flex-col overflow-hidden">
-                <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
-                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">New Code</h3>
+              {/* Code Panels */}
+              <div className="flex-grow grid grid-cols-2 gap-1">
+                {/* Old Code */}
+                <div className="flex flex-col overflow-hidden border-r border-slate-700">
+                  <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
+                    <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      {oldFiles.has(selectedFile || '') ? 'Old Code' : 'Old Code (Not Changed)'}
+                    </h3>
+                  </div>
+                  {currentOldCode ? (
+                    <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
+                      <code>{currentOldCode}</code>
+                    </pre>
+                  ) : (
+                    <div className="flex-grow flex items-center justify-center text-slate-500 italic">
+                      File not in old version
+                    </div>
+                  )}
                 </div>
-                <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
-                  <code>{newCode || 'No code available'}</code>
-                </pre>
+
+                {/* New Code */}
+                <div className="flex flex-col overflow-hidden">
+                  <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
+                    <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      {newFiles.has(selectedFile || '') ? 'New Code' : 'New Code (Not Changed)'}
+                    </h3>
+                  </div>
+                  {currentNewCode ? (
+                    <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
+                      <code>{currentNewCode}</code>
+                    </pre>
+                  ) : (
+                    <div className="flex-grow flex items-center justify-center text-slate-500 italic">
+                      File not in new version
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

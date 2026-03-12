@@ -163,7 +163,7 @@ export function useBackend() {
     setError(null);
     try {
       const response = await fetch(`${BASE_URL}/generate-code?id=${projectId}`, {
-        method: 'POST',
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
 

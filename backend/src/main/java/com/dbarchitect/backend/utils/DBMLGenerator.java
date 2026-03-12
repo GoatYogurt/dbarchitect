@@ -85,6 +85,7 @@ public class DBMLGenerator {
             4. No on update for timestamps. Use default: `now()` for created_at and updated_at.
             5. Include soft delete column (deleted_at DATETIME [null] and is_deleted bool) in all tables.
             6. With join tables for many-to-many relationships, dont use snake_case for table name, use PascalCase instead.
+            7. Make sure to include ''' at the beginning and end of the DBML code block, and specify 'dbml' after the opening ''' for syntax highlighting.
             
             Example Format:
             ```dbml
