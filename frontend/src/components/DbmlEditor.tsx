@@ -1,5 +1,6 @@
 
 import React from 'react';
+import Editor from '@monaco-editor/react';
 import { CodeIcon } from './icons';
 
 interface DbmlEditorProps {
@@ -15,7 +16,7 @@ interface DbmlEditorProps {
 
 export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = false, isComparing = false, canSave = false, canCompare = false }: DbmlEditorProps) {
   return (
-    <div className="bg-slate-800 rounded-lg shadow-inner flex flex-col overflow-hidden border border-slate-700">
+    <div className="h-full bg-slate-800 rounded-lg shadow-inner flex flex-col overflow-hidden border border-slate-700">
       <div className="flex items-center gap-2 p-3 bg-slate-900/50 border-b border-slate-700">
         <CodeIcon className="w-5 h-5 text-emerald-400" />
         <h2 className="font-semibold text-slate-200">2. Review DBML</h2>
@@ -70,14 +71,24 @@ export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = fals
           </button>
         )}
       </div>
-      <div className="relative flex-grow">
-        <textarea
+      <div className="relative flex-grow min-h-0">
+        <Editor
+          height="100%"
+          defaultLanguage="sql"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="AI-generated DBML will appear here..."
-            className="w-full h-full p-4 bg-transparent resize-none focus:outline-none font-mono text-xs text-slate-300 leading-relaxed placeholder-slate-500"
-          spellCheck="false"
-          aria-label="DBML code editor"
+          onChange={(nextValue) => onChange(nextValue ?? '')}
+          theme="vs-dark"
+          options={{
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            automaticLayout: true,
+            tabSize: 2,
+            suggestOnTriggerCharacters: false,
+            quickSuggestions: false,
+          }}
         />
       </div>
     </div>

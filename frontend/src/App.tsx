@@ -227,33 +227,35 @@ export default function App() {
         )}
 
         {currentStep === 2 && (
-          <div className="flex h-full flex-col">
-            <div className="flex-grow grid grid-cols-1 gap-4 overflow-auto px-6 pt-2 xl:grid-cols-2 xl:overflow-hidden">
-              <div className="min-h-[75vh] xl:h-full xl:overflow-hidden">
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+            <div className="min-h-0 grid grid-cols-1 gap-4 overflow-auto px-6 pt-2 pb-4 xl:grid-cols-[1.35fr,1fr] xl:overflow-hidden">
+              <div className="min-h-[60vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
                 <DbmlEditor value={dbmlCode} onChange={setDbmlCode} />
               </div>
-              <div className="min-h-[75vh] xl:h-full overflow-hidden">
+              <div className="min-h-[60vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
                 <SchemaVisualizer schema={parsedSchema} />
               </div>
             </div>
 
-            {error && <p className="mx-4 mt-2 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
+            <div className="border-t border-slate-700 bg-slate-800">
+              {error && <p className="mx-6 mt-3 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
 
-            <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-slate-700 bg-slate-800/40">
-              <button
-                onClick={() => setCurrentStep(1)}
-                disabled={isBusy}
-                className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleContinueFromSchema}
-                disabled={isBusy || !dbmlCode.trim()}
-                className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-              >
-                {isDbmlUpdating ? 'Saving Schema...' : 'Continue to Scaffold Code'}
-              </button>
+              <div className="flex items-center justify-between px-6 py-3">
+                <button
+                  onClick={() => setCurrentStep(1)}
+                  disabled={isBusy}
+                  className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleContinueFromSchema}
+                  disabled={isBusy || !dbmlCode.trim()}
+                  className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-600"
+                >
+                  {isDbmlUpdating ? 'Saving Schema...' : 'Continue to Scaffold Code'}
+                </button>
+              </div>
             </div>
           </div>
         )}
