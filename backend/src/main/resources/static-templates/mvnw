@@ -1,0 +1,4 @@
+#!/bin/sh
+MAVEN_OPTS="-Xmx1024m"
+exec mvn "$@"
+

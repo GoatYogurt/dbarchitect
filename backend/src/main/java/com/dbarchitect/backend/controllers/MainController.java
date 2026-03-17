@@ -47,6 +47,7 @@ public class MainController {
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
+    // endpoint to download generated code as ZIP file
     @GetMapping("/generate-code")
     public ResponseEntity<byte[]> downloadProjectZip(@RequestParam Long id) {
         try {
@@ -64,6 +65,7 @@ public class MainController {
         }
     }
 
+    // endppint to generate preview of project structure as a file tree based on the DBML code of a project
     @GetMapping("/generate-preview")
     public FileNode generatePreview(@RequestParam Long id) {
         // Generate preview for the project identified by ID (reads project from DB and builds tree)
@@ -106,6 +108,7 @@ public class MainController {
         return ResponseEntity.ok(diffResults);
     }
 
+    // endpoint to generate Java code files from DBML code, returns a list of file metadata and content
     @PostMapping("/generate-java-code")
     public ResponseEntity<List<Map<String, String>>> generateJavaCode(@RequestBody GenerateCodeRequest request) {
         try {

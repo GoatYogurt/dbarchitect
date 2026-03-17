@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    image: demo-app:latest
+    ports:
+      - "8080:8080"
+

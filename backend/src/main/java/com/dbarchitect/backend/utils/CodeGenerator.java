@@ -85,14 +85,14 @@ public class CodeGenerator {
         // 2. Duyệt quan hệ trong toàn bộ Database
         db.getRelationships().forEach(rel -> {
                 // Lấy thông tin Table từ List<Column> (giả định quan hệ đơn cột)
-                Table fromTable = rel.getFrom().get(0).getTable();
-                Table toTable = rel.getTo().get(0).getTable();
+                Table fromTable = rel.getFrom().getFirst().getTable();
+                Table toTable = rel.getTo().getFirst().getTable();
 
                 // TRƯỜNG HỢP A: Bảng hiện tại chứa Khóa ngoại (Many-to-One)
                 // Ví dụ: Books.author_id > Authors.id (Books là From)
                 if (fromTable.getName().equals(table.getName())) {
                     Map<String, Object> mto = new HashMap<>();
-                    String fkColName = rel.getFrom().get(0).getName();
+                    String fkColName = rel.getFrom().getFirst().getName();
                     fkColumnNames.add(fkColName);
 
                     mto.put("joinColumn", fkColName);
@@ -193,15 +193,13 @@ public class CodeGenerator {
     public byte[] generateProjectZip(Long projectId) throws Exception {
         DesignProject project = designProjectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project ID " + projectId + " không tồn tại."));
-
         List<GeneratedFile> generatedFiles = generateAllSourceFiles(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        String basePackagePath = "src/main/java/com/example/demo/";
 
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
             for (GeneratedFile file : generatedFiles) {
-                ZipEntry ze = new ZipEntry(basePackagePath + file.path());
+                ZipEntry ze = new ZipEntry(file.path());
                 zos.putNextEntry(ze);
                 zos.write(file.content().getBytes());
                 zos.closeEntry();
@@ -236,7 +234,7 @@ public class CodeGenerator {
     // Thêm record phụ trợ bên trong hoặc ngoài class
     private record GeneratedFile(String path, String content) {}
 
-    public List<GeneratedFile> generateAllSourceFiles(String dbmlContent) throws Exception {
+    private List<GeneratedFile> generateAllSourceFiles(String dbmlContent) throws Exception {
         Database db = DbmlParser.parse(dbmlContent);
         List<GeneratedFile> files = new ArrayList<>();
         Schema schema = db.getSchema("public");
@@ -257,6 +255,40 @@ public class CodeGenerator {
             // 4. Render Controller
             files.add(renderFile("controller.ftl", dataModel, "controller/" + className + "Controller.java"));
         }
-        return files;
+
+        // Add static project-level files (predefined, no templating) from classpath: static-templates
+        String[][] staticFiles = new String[][]{
+                {"static-templates/pom.xml", "pom.xml"},
+                {"static-templates/mvnw", "mvnw"},
+                {"static-templates/mvnw.cmd", "mvnw.cmd"},
+                {"static-templates/Dockerfile", "Dockerfile"},
+                {"static-templates/docker-compose.yml", "docker-compose.yml"},
+                {"static-templates/README.md", "README.md"}
+        };
+
+        for (String[] pair : staticFiles) {
+            String res = pair[0];
+            String outName = pair[1];
+            try (var is = this.getClass().getClassLoader().getResourceAsStream(res)) {
+                if (is != null) {
+                    byte[] b = is.readAllBytes();
+                    files.add(new GeneratedFile(outName, new String(b)));
+                }
+            }
+        }
+
+        // Relocate java source files to standard Maven layout
+        List<GeneratedFile> relocated = new ArrayList<>();
+        for (GeneratedFile f : files) {
+            String p = f.path();
+            if (p.endsWith(".java") && !p.startsWith("src/")) {
+                p = "src/main/java/com/example/demo/" + p;
+            } else if (p.startsWith("entity/") || p.startsWith("repository/") || p.startsWith("service/") || p.startsWith("controller/")) {
+                p = "src/main/java/com/example/demo/" + p;
+            }
+            relocated.add(new GeneratedFile(p, f.content()));
+        }
+
+        return relocated;
     }
 }

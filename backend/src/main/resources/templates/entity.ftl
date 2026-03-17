@@ -2,6 +2,7 @@ package ${packageName}.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 import java.time.LocalDateTime;
 <#list (imports)![] as import>
 import ${import};
@@ -37,4 +38,8 @@ public class ${className} {
     @ToString.Exclude
     private List<${rel.targetClass}> ${rel.fieldName};
     </#list>
+
+    public void setId(${idType} id) {
+        this.id = id;
+    }
 }
