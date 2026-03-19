@@ -6,6 +6,7 @@ interface ProjectSelectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectProject: (project: Project) => void;
+  onCreateNew: () => void;
   isLoading?: boolean;
   projects: Project[];
   onRefresh: () => void;
@@ -15,6 +16,7 @@ export function ProjectSelectModal({
   isOpen,
   onClose,
   onSelectProject,
+  onCreateNew,
   isLoading = false,
   projects,
   onRefresh,
@@ -54,6 +56,16 @@ export function ProjectSelectModal({
         </div>
 
         <div className="space-y-3">
+          <button
+            onClick={() => {
+              onCreateNew();
+              onClose();
+            }}
+            className="w-full px-4 py-3 rounded-md bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-semibold hover:from-cyan-700 hover:to-cyan-600 transition-all duration-200 shadow-lg"
+          >
+            + Create New Project
+          </button>
+
           <div className="flex items-center gap-2">
             <input
               type="text"

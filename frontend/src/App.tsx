@@ -149,6 +149,15 @@ export default function App() {
     setCurrentStep(2);
   }, []);
 
+  const handleCreateNewProject = useCallback(() => {
+    setProjectName('');
+    setRequirements('');
+    setDbmlCode('');
+    setSelectedProjectId(null);
+    setGeneratedCode([]);
+    setCurrentStep(1);
+  }, []);
+
   const handleTabFillExamples = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -191,6 +200,7 @@ export default function App() {
         onClose={() => setIsProjectSelectorOpen(false)}
         projects={projects}
         onSelectProject={handleSelectProject}
+        onCreateNew={handleCreateNewProject}
         isLoading={isLoadingProjects}
         onRefresh={handleLoadProjects}
       />
@@ -203,13 +213,13 @@ export default function App() {
               onClick={() => setIsProjectSelectorOpen(true)}
               disabled={isBusy}
               className="ml-2 flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-slate-700/50 text-slate-200 hover:bg-slate-600/50 border border-slate-600 hover:border-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Load existing project"
-              title="Load existing project"
+              aria-label="Load project"
+              title="Load a project"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400">
                 <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
               </svg>
-              Load Project
+              {projectName ? projectName : 'Load Project'}
             </button>
           </div>
         </div>
