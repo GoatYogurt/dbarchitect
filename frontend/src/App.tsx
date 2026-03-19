@@ -8,6 +8,7 @@ import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
 import { ProjectSelectModal } from './components/ProjectSelectModal';
+import { CodeDiffModal } from './components/CodeDiffModal';
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -29,9 +30,11 @@ export default function App() {
   const [requirements, setRequirements] = useState<string>('');
   const [projectName, setProjectName] = useState<string>('');
   const [dbmlCode, setDbmlCode] = useState<string>('');
+  const [originalDbmlCode, setOriginalDbmlCode] = useState<string>('');
   const [parsedSchema, setParsedSchema] = useState<ParsedSchema>({ tables: [], refs: [] });
   const [generatedCode, setGeneratedCode] = useState<GeneratedFile[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isDownloadPopupOpen, setIsDownloadPopupOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -56,6 +59,10 @@ export default function App() {
   } = useBackend();
 
   const isBusy = isLoading || isCodeLoading || isDbmlUpdating;
+  const hasDbmlChanged = useMemo(
+    () => dbmlCode.trim() !== originalDbmlCode.trim(),
+    [dbmlCode, originalDbmlCode]
+  );
 
   const steps = useMemo(
     () => [
@@ -78,6 +85,7 @@ export default function App() {
     }
 
     setDbmlCode(response.cleanDbmlCode);
+    setOriginalDbmlCode(response.cleanDbmlCode);
     setSelectedProjectId(response.projectId);
     setGeneratedCode([]);
     setCurrentStep(2);
@@ -93,6 +101,8 @@ export default function App() {
       if (!success) {
         return;
       }
+
+      setOriginalDbmlCode(dbmlCode);
     }
 
     setCurrentStep(3);
@@ -143,6 +153,7 @@ export default function App() {
   const handleSelectProject = useCallback((project: Project) => {
     setProjectName(project.projectName);
     setDbmlCode(project.cleanDbmlCode);
+    setOriginalDbmlCode(project.cleanDbmlCode);
     setSelectedProjectId(project.projectId);
     setRequirements('');
     setGeneratedCode([]);
@@ -153,6 +164,7 @@ export default function App() {
     setProjectName('');
     setRequirements('');
     setDbmlCode('');
+    setOriginalDbmlCode('');
     setSelectedProjectId(null);
     setGeneratedCode([]);
     setCurrentStep(1);
@@ -193,6 +205,13 @@ export default function App() {
         }}
         isGenerating={isDownloading}
         isSuccess={downloadSuccess}
+      />
+
+      <CodeDiffModal
+        isOpen={isDiffModalOpen}
+        onClose={() => setIsDiffModalOpen(false)}
+        projectId={selectedProjectId}
+        newDbmlCode={dbmlCode}
       />
 
       <ProjectSelectModal
@@ -327,13 +346,23 @@ export default function App() {
                 >
                   Back
                 </button>
-                <button
-                  onClick={handleContinueFromSchema}
-                  disabled={isBusy || !dbmlCode.trim()}
-                  className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-                >
-                  {isDbmlUpdating ? 'Saving Schema...' : 'Continue to Scaffold Code'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsDiffModalOpen(true)}
+                    disabled={isBusy || !selectedProjectId || !dbmlCode.trim() || !hasDbmlChanged}
+                    className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-600"
+                    title={hasDbmlChanged ? 'Compare changes' : 'Edit DBML to enable comparison'}
+                  >
+                    Compare Changes
+                  </button>
+                  <button
+                    onClick={handleContinueFromSchema}
+                    disabled={isBusy || !dbmlCode.trim()}
+                    className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isDbmlUpdating ? 'Saving Schema...' : 'Continue to Scaffold Code'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

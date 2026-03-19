@@ -1,37 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CodeChange } from '../types';
 
 interface CodeDiffModalProps {
   isOpen: boolean;
   onClose: () => void;
-  changes: CodeChange[] | null;
-  isLoading?: boolean;
-  oldCode?: string;
-  newCode?: string;
+  projectId: number | null;
+  newDbmlCode: string;
 }
-
-interface ParsedFile {
-  fileName: string;
-  content: string;
-}
-
-// Parse concatenated code by file comments
-const parseFiles = (code: string): Map<string, string> => {
-  const files = new Map<string, string>();
-  if (!code.trim()) return files;
-
-  // Match "// File: <filename>" followed by code until next file comment or end
-  const filePattern = /\/\/ File: (.+?)\n([\s\S]*?)(?=\/\/ File:|$)/g;
-  let match;
-
-  while ((match = filePattern.exec(code)) !== null) {
-    const fileName = match[1].trim();
-    const content = match[2].trim();
-    files.set(fileName, content);
-  }
-
-  return files;
-};
 
 const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, index }) => {
   const getActionClassName = (action: string) => {
@@ -83,6 +58,13 @@ const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, ind
         <div className="font-semibold text-slate-100 text-base mb-2">
           {change.element}
         </div>
+
+        {(change.filePath || typeof change.lineNumber === 'number') && (
+          <div className="mb-2 text-xs text-slate-400 font-mono break-all">
+            {change.filePath ? `${change.filePath}` : 'Unknown file'}
+            {typeof change.lineNumber === 'number' ? `:${change.lineNumber}` : ''}
+          </div>
+        )}
         
         {/* Type and Action badges */}
         <div className="flex items-center gap-2 mb-2">
@@ -108,31 +90,63 @@ const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, ind
   );
 };
 
-export function CodeDiffModal({ isOpen, onClose, changes, isLoading = false, oldCode = '', newCode = '' }: CodeDiffModalProps) {
-  const [viewMode, setViewMode] = useState<'diff' | 'code'>('diff');
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeDiffModalProps) {
+  const [changes, setChanges] = useState<CodeChange[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Parse files from concatenated code
-  const oldFiles = useMemo(() => parseFiles(oldCode), [oldCode]);
-  const newFiles = useMemo(() => parseFiles(newCode), [newCode]);
-
-  // Get all unique file names (union of both old and new)
-  const allFileNames = useMemo(() => {
-    const names = new Set<string>();
-    oldFiles.forEach((_, fileName) => names.add(fileName));
-    newFiles.forEach((_, fileName) => names.add(fileName));
-    return Array.from(names).sort();
-  }, [oldFiles, newFiles]);
-
-  // Set default selected file if not set yet using useEffect
   useEffect(() => {
-    if (!selectedFile && allFileNames.length > 0) {
-      setSelectedFile(allFileNames[0]);
+    if (!isOpen) {
+      return;
     }
-  }, [allFileNames, selectedFile]);
 
-  const currentOldCode = selectedFile ? (oldFiles.get(selectedFile) || '') : '';
-  const currentNewCode = selectedFile ? (newFiles.get(selectedFile) || '') : '';
+    if (!projectId || !newDbmlCode.trim()) {
+      setChanges(null);
+      setError('Missing projectId or new DBML code.');
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchComparison = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('http://localhost:8080/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, newDbmlCode }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `Backend error: ${response.status}`);
+        }
+
+        const result: CodeChange[] = await response.json();
+
+        if (isMounted) {
+          setChanges(Array.isArray(result) ? result : []);
+        }
+      } catch (e: any) {
+        if (isMounted) {
+          setChanges(null);
+          setError(e.message || 'Failed to compare DBML changes.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchComparison();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, projectId, newDbmlCode]);
 
   if (!isOpen) return null;
 
@@ -165,163 +179,78 @@ export function CodeDiffModal({ isOpen, onClose, changes, isLoading = false, old
           </button>
         </div>
 
-        {/* View Mode Tabs */}
-        <div className="flex-shrink-0 px-6 py-3 border-b border-slate-700 flex gap-2">
-          <button
-            onClick={() => setViewMode('diff')}
-            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
-              viewMode === 'diff'
-                ? 'bg-cyan-500 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-          >
-            Changes
-          </button>
-          <button
-            onClick={() => setViewMode('code')}
-            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
-              viewMode === 'code'
-                ? 'bg-cyan-500 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-          >
-            Side-by-Side
-          </button>
-        </div>
-
         {/* Content */}
         <div className="flex-grow overflow-auto">
-          {viewMode === 'diff' ? (
-            // Changes View
-            <>
-              {isLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center text-slate-400">
-                    <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p>Comparing code...</p>
-                  </div>
-                </div>
-              ) : hasChanges ? (
-                <div className="divide-y divide-slate-700">
-                  {changes.map((change, index) => (
-                    <DiffLine key={index} change={change} index={index} />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-slate-400">
-                  <div className="text-center">
-                    <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <p>No changes detected</p>
-                    <p className="text-sm mt-1">The code is identical</p>
-                  </div>
-                </div>
-              )}
-            </>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-slate-400">
+                <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p>Comparing code...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-full px-6">
+              <div className="w-full max-w-xl rounded-md border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            </div>
+          ) : hasChanges ? (
+            <div className="divide-y divide-slate-700">
+              {changes.map((change, index) => (
+                <DiffLine
+                  key={`${change.filePath || 'unknown'}-${change.lineNumber || 0}-${change.element}-${index}`}
+                  change={change}
+                  index={index}
+                />
+              ))}
+            </div>
           ) : (
-            // Side-by-Side Code View
-            <div className="flex flex-col h-full">
-              {/* File Selector */}
-              {allFileNames.length > 0 && (
-                <div className="flex-shrink-0 px-6 py-3 border-b border-slate-700 bg-slate-900/50 overflow-x-auto">
-                  <div className="flex gap-2">
-                    {allFileNames.map(fileName => (
-                      <button
-                        key={fileName}
-                        onClick={() => setSelectedFile(fileName)}
-                        className={`px-3 py-1 text-xs font-mono rounded whitespace-nowrap transition-colors ${
-                          selectedFile === fileName
-                            ? 'bg-cyan-500 text-white'
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                        title={fileName}
-                      >
-                        {fileName.split('/').pop()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Code Panels */}
-              <div className="flex-grow grid grid-cols-2 gap-1">
-                {/* Old Code */}
-                <div className="flex flex-col overflow-hidden border-r border-slate-700">
-                  <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
-                    <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      {oldFiles.has(selectedFile || '') ? 'Old Code' : 'Old Code (Not Changed)'}
-                    </h3>
-                  </div>
-                  {currentOldCode ? (
-                    <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
-                      <code>{currentOldCode}</code>
-                    </pre>
-                  ) : (
-                    <div className="flex-grow flex items-center justify-center text-slate-500 italic">
-                      File not in old version
-                    </div>
-                  )}
-                </div>
-
-                {/* New Code */}
-                <div className="flex flex-col overflow-hidden">
-                  <div className="flex-shrink-0 px-4 py-2 bg-slate-900/50 border-b border-slate-700">
-                    <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      {newFiles.has(selectedFile || '') ? 'New Code' : 'New Code (Not Changed)'}
-                    </h3>
-                  </div>
-                  {currentNewCode ? (
-                    <pre className="flex-grow overflow-auto p-4 text-xs font-mono text-slate-300 bg-slate-900/30 leading-relaxed">
-                      <code>{currentNewCode}</code>
-                    </pre>
-                  ) : (
-                    <div className="flex-grow flex items-center justify-center text-slate-500 italic">
-                      File not in new version
-                    </div>
-                  )}
-                </div>
+            <div className="flex items-center justify-center h-full text-slate-400">
+              <div className="text-center">
+                <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <p>No changes detected</p>
+                <p className="text-sm mt-1">The code is identical</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Legend - Only show in Changes view */}
-        {viewMode === 'diff' && (
-          <div className="flex-shrink-0 px-6 py-4 border-t border-slate-700 bg-slate-900/50 space-y-3">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Changes Legend</div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="flex items-center gap-2">
-                <span className="text-green-400 font-bold text-base leading-none">+</span>
-                <div>
-                  <div className="text-xs text-slate-300">Added</div>
-                  <div className="text-xs text-slate-500">New code</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-red-400 font-bold text-base leading-none">−</span>
-                <div>
-                  <div className="text-xs text-slate-300">Removed</div>
-                  <div className="text-xs text-slate-500">Deleted code</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-yellow-400 font-bold text-base leading-none">~</span>
-                <div>
-                  <div className="text-xs text-slate-300">Modified</div>
-                  <div className="text-xs text-slate-500">Changed code</div>
-                </div>
-              </div>
+        {/* Legend */}
+        <div className="flex-shrink-0 px-6 py-4 border-t border-slate-700 bg-slate-900/50 space-y-3">
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Changes Legend</div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="flex items-center gap-2">
+              <span className="text-green-400 font-bold text-base leading-none">+</span>
               <div>
-                <div className="text-xs text-slate-400 mb-1"><span className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded">FIELD</span></div>
-                <div className="text-xs text-slate-500">Element type</div>
+                <div className="text-xs text-slate-300">Added</div>
+                <div className="text-xs text-slate-500">New code</div>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-red-400 font-bold text-base leading-none">−</span>
+              <div>
+                <div className="text-xs text-slate-300">Removed</div>
+                <div className="text-xs text-slate-500">Deleted code</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 font-bold text-base leading-none">~</span>
+              <div>
+                <div className="text-xs text-slate-300">Modified</div>
+                <div className="text-xs text-slate-500">Changed code</div>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-1"><span className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded">FIELD</span></div>
+              <div className="text-xs text-slate-500">Element type</div>
+            </div>
           </div>
-        )}
+        </div>
 
         {/* Footer */}
         <div className="flex-shrink-0 px-6 py-4 border-t border-slate-700 flex justify-end gap-3">

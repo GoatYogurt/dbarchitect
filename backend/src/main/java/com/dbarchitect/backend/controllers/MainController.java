@@ -102,9 +102,9 @@ public class MainController {
     }
 
     @PostMapping("/compare")
-    public ResponseEntity<List<CodeChange>> getDiff(@RequestBody CompareRequest req) {
+    public ResponseEntity<List<CodeChange>> getDiff(@RequestBody CompareRequest req) throws Exception {
         // req chứa oldCode và newCode
-        List<CodeChange> diffResults = mainService.compareCode(req.getOldCode(), req.getNewCode());
+        List<CodeChange> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
         return ResponseEntity.ok(diffResults);
     }
 

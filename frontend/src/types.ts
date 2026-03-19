@@ -62,4 +62,6 @@ export interface CodeChange {
   type: string;     // Type (FIELD, METHOD, ANNOTATION)
   action: string;   // ADDED, REMOVED, MODIFIED
   detail: string;   // Description of the change
+  filePath?: string;
+  lineNumber?: number;
 }

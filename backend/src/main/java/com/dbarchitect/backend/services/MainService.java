@@ -20,8 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+// ...existing code... (removed unused regex imports)
 import java.util.Collections;
 
 @Service
@@ -122,33 +121,117 @@ public class MainService {
         return "text";
     }
 
-    public List<CodeChange> compareCode(String oldSource, String newSource) {
+    public List<CodeChange> compareCode(Integer projectId, String newDbmlCode) throws Exception {
         List<CodeChange> changes = new ArrayList<>();
 
-        // Parse possibly-multiple compilation units from each source
-        List<CompilationUnit> cusOld = parsePossiblyMultiple(oldSource);
-        List<CompilationUnit> cusNew = parsePossiblyMultiple(newSource);
+        DesignProject project = designProjectRepository.findById(projectId.longValue()).orElse(null);
+        if (project == null) {
+            changes.add(new CodeChange("N/A", "PROJECT", "NOT_FOUND", "Dự án không tồn tại"));
+            return changes;
+        }
+        StringBuilder oldDbmlCode = new StringBuilder(project.getRawDbmlCode());
+        System.out.println(oldDbmlCode.toString());
+        List<Map<String, String>> oldSourceCodeFiles = codeGenerator.generateFilesFromDbml(DBMLCode.extractCleanDbmlCode(oldDbmlCode.toString()));
+        List<Map<String, String>> newSourceCodeFiles = codeGenerator.generateFilesFromDbml(newDbmlCode);
 
-        // Extract fields from all compilation units
-        Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
-        Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
+                // Build maps keyed by path for easy pairing
+                Map<String, String> oldByPath = new HashMap<>();
+                for (Map<String, String> m : oldSourceCodeFiles) {
+                    String path = m.getOrDefault("path", "unknown");
+                    oldByPath.put(path, m.get("content"));
+                }
+                Map<String, String> newByPath = new HashMap<>();
+                for (Map<String, String> m : newSourceCodeFiles) {
+                    String path = m.getOrDefault("path", "unknown");
+                    newByPath.put(path, m.get("content"));
+                }
 
-        // 3. So sánh: Tìm cái mới thêm hoặc bị sửa
-        fieldsNew.forEach((name, type) -> {
-            if (!fieldsOld.containsKey(name)) {
-                changes.add(new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type));
-            } else if (!fieldsOld.get(name).equals(type)) {
-                changes.add(new CodeChange(name, "FIELD", "MODIFIED",
-                        "Đổi từ " + fieldsOld.get(name) + " sang " + type));
-            }
-        });
+                // Union of all file paths
+                var allPaths = new java.util.HashSet<String>();
+                allPaths.addAll(oldByPath.keySet());
+                allPaths.addAll(newByPath.keySet());
 
-        // 4. So sánh: Tìm cái bị xóa
-        fieldsOld.keySet().forEach(name -> {
-            if (!fieldsNew.containsKey(name)) {
-                changes.add(new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này"));
-            }
-        });
+                // Compare file-by-file
+                for (String path : allPaths) {
+                    String oldContent = oldByPath.get(path);
+                    String newContent = newByPath.get(path);
+
+                    if (oldContent == null) {
+                        // New file added
+                        CodeChange cc = new CodeChange(path, "FILE", "ADDED", "File added");
+                        cc.setFilePath(path);
+                        cc.setLineNumber(1);
+                        changes.add(cc);
+                        continue;
+                    }
+                    if (newContent == null) {
+                        // File removed
+                        CodeChange cc = new CodeChange(path, "FILE", "REMOVED", "File removed");
+                        cc.setFilePath(path);
+                        cc.setLineNumber(1);
+                        changes.add(cc);
+                        continue;
+                    }
+
+                    // Both exist: parse and compare fields inside this file
+                    List<CompilationUnit> cusOld = parsePossiblyMultiple(oldContent);
+                    List<CompilationUnit> cusNew = parsePossiblyMultiple(newContent);
+                    Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
+                    Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
+
+                    // Parse compilation units to find line numbers for fields
+                    Map<String, Integer> fieldLinesOld = mapFieldToLine(cusOld);
+                    Map<String, Integer> fieldLinesNew = mapFieldToLine(cusNew);
+
+                    fieldsNew.forEach((name, type) -> {
+                        if (!fieldsOld.containsKey(name)) {
+                            CodeChange cc = new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type);
+                            cc.setFilePath(path);
+                            cc.setLineNumber(fieldLinesNew.getOrDefault(name, 1));
+                            changes.add(cc);
+                        } else if (!fieldsOld.get(name).equals(type)) {
+                            CodeChange cc = new CodeChange(name, "FIELD", "MODIFIED",
+                                    "Đổi từ " + fieldsOld.get(name) + " sang " + type);
+                            cc.setFilePath(path);
+                            cc.setLineNumber(fieldLinesNew.getOrDefault(name, fieldLinesOld.getOrDefault(name, 1)));
+                            changes.add(cc);
+                        }
+                    });
+
+                    fieldsOld.keySet().forEach(name -> {
+                        if (!fieldsNew.containsKey(name)) {
+                            CodeChange cc = new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này");
+                            cc.setFilePath(path);
+                            cc.setLineNumber(fieldLinesOld.getOrDefault(name, 1));
+                            changes.add(cc);
+                        }
+                    });
+                }
+
+//        // Parse possibly-multiple compilation units from each source
+//        List<CompilationUnit> cusOld = parsePossiblyMultiple(oldSourceCode);
+//        List<CompilationUnit> cusNew = parsePossiblyMultiple(newSourceCode);
+//
+//        // Extract fields from all compilation units
+//        Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
+//        Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
+//
+//        // 3. So sánh: Tìm cái mới thêm hoặc bị sửa
+//        fieldsNew.forEach((name, type) -> {
+//            if (!fieldsOld.containsKey(name)) {
+//                changes.add(new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type));
+//            } else if (!fieldsOld.get(name).equals(type)) {
+//                changes.add(new CodeChange(name, "FIELD", "MODIFIED",
+//                        "Đổi từ " + fieldsOld.get(name) + " sang " + type));
+//            }
+//        });
+//
+//        // 4. So sánh: Tìm cái bị xóa
+//        fieldsOld.keySet().forEach(name -> {
+//            if (!fieldsNew.containsKey(name)) {
+//                changes.add(new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này"));
+//            }
+//        });
 
         return changes;
     }
@@ -201,6 +284,21 @@ public class MainService {
             });
         }
         return fieldMap;
+    }
+
+    // Map field name to its starting line number in provided compilation units
+    private Map<String, Integer> mapFieldToLine(List<CompilationUnit> cus) {
+        Map<String, Integer> map = new HashMap<>();
+        for (CompilationUnit cu : cus) {
+            if (cu == null) continue;
+            cu.findAll(FieldDeclaration.class).forEach(f -> {
+                int line = f.getBegin().map(p -> p.line).orElse(1);
+                f.getVariables().forEach(v -> {
+                    map.put(v.getNameAsString(), line);
+                });
+            });
+        }
+        return map;
     }
 
     public List<Map<String, String>> generateFilesFromDbml(String cleanDbml) throws Exception {
