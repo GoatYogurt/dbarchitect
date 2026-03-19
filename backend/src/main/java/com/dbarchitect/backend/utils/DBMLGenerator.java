@@ -89,7 +89,7 @@ public class DBMLGenerator {
             
             Example Format:
             ```dbml
-            Table User {
+            Table Users {
               id INT [pk]
               username VARCHAR(50) [unique, not null]
               created_at DATETIME [default: 'now()']
@@ -97,7 +97,7 @@ public class DBMLGenerator {
               deleted_at DATETIME [null]
               ...
             }
-            Table Product {
+            Table Products {
               id INT [pk]
               name VARCHAR(255) [not null]
               ...

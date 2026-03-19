@@ -163,7 +163,7 @@ public class CodeGenerator {
     private String mapSqlToJavaType(String sqlType) {
         if (sqlType.equalsIgnoreCase("varchar")) return "String";
         if (sqlType.equalsIgnoreCase("int")) return "Integer";
-        if (sqlType.equalsIgnoreCase("boolean")) return "Boolean";
+        if (sqlType.equalsIgnoreCase("boolean") || sqlType.equalsIgnoreCase("bool")) return "Boolean";
         if (sqlType.equalsIgnoreCase("datetime")) return "LocalDateTime";
         return "String";
     }
@@ -263,7 +263,9 @@ public class CodeGenerator {
                 {"static-templates/mvnw.cmd", "mvnw.cmd"},
                 {"static-templates/Dockerfile", "Dockerfile"},
                 {"static-templates/docker-compose.yml", "docker-compose.yml"},
-                {"static-templates/README.md", "README.md"}
+                {"static-templates/README.md", "README.md"},
+                {"static-templates/Application.java", "src/main/java/com/example/demo/Application.java"},
+                {"static-templates/application.properties", "src/main/resources/application.properties"}
         };
 
         for (String[] pair : staticFiles) {
@@ -283,6 +285,8 @@ public class CodeGenerator {
             String p = f.path();
             if (p.endsWith(".java") && !p.startsWith("src/")) {
                 p = "src/main/java/com/example/demo/" + p;
+            } else if (p.endsWith(".properties") && !p.startsWith("src/")) {
+                p = "src/main/resources/" + p;
             } else if (p.startsWith("entity/") || p.startsWith("repository/") || p.startsWith("service/") || p.startsWith("controller/")) {
                 p = "src/main/java/com/example/demo/" + p;
             }
