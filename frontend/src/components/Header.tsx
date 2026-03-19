@@ -1,12 +1,13 @@
 
 import React from 'react';
-import { BrainCircuitIcon, ZapIcon, ServerIcon } from './icons';
+import { BrainCircuitIcon, ZapIcon, ServerIcon, FolderIcon } from './icons';
 
 interface HeaderProps {
   onGenerate: () => void;
   onGenerateCode: () => void;
   onDownloadCode: () => void;
   onPreview: () => void;
+  onOpenProjectSelector: () => void;
   isLoading: boolean;
   isCodeLoading: boolean;
   isPreviewLoading: boolean;
@@ -14,7 +15,7 @@ interface HeaderProps {
   hasProjectId: boolean;
 }
 
-export function Header({ onGenerate, onGenerateCode, onDownloadCode, onPreview, isLoading, isCodeLoading, isPreviewLoading, dbmlCode, hasProjectId }: HeaderProps) {
+export function Header({ onGenerate, onGenerateCode, onDownloadCode, onPreview, onOpenProjectSelector, isLoading, isCodeLoading, isPreviewLoading, dbmlCode, hasProjectId }: HeaderProps) {
   const isAnythingLoading = isLoading || isCodeLoading || isPreviewLoading;
 
   return (
@@ -25,6 +26,16 @@ export function Header({ onGenerate, onGenerateCode, onDownloadCode, onPreview, 
           <h1 className="text-xl font-bold tracking-tight text-slate-100">
             DBML Architect <span className="text-cyan-400">AI</span>
           </h1>
+          <button
+            onClick={onOpenProjectSelector}
+            disabled={isAnythingLoading}
+            className="ml-2 flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-slate-700/50 text-slate-200 hover:bg-slate-600/50 border border-slate-600 hover:border-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Load existing project"
+            title="Load existing project"
+          >
+            <FolderIcon className="w-4 h-4 text-purple-400" />
+            Load Project
+          </button>
         </div>
         <div className="flex items-center gap-3">
           <button

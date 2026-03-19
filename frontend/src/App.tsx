@@ -3,10 +3,11 @@ import { DbmlEditor } from './components/DbmlEditor';
 import { SchemaVisualizer } from './components/SchemaVisualizer';
 import { useBackend } from './hooks/useBackend';
 import { parseDBML } from './services/dbmlParser';
-import { ParsedSchema, GeneratedFile } from './types';
+import { ParsedSchema, GeneratedFile, Project } from './types';
 import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
+import { ProjectSelectModal } from './components/ProjectSelectModal';
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -35,6 +36,9 @@ export default function App() {
   const [isDownloadPopupOpen, setIsDownloadPopupOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
   const [selectedBackendFramework, setSelectedBackendFramework] = useState<string>('spring-boot');
   const [selectedFrontendFramework, setSelectedFrontendFramework] = useState<string>('none');
@@ -48,6 +52,7 @@ export default function App() {
     error,
     updateDbml,
     downloadGeneratedCode,
+    fetchProjects,
   } = useBackend();
 
   const isBusy = isLoading || isCodeLoading || isDbmlUpdating;
@@ -63,22 +68,20 @@ export default function App() {
   );
 
   const handleGenerateSchema = useCallback(async () => {
-    if (!requirements.trim()) {
+    if (!requirements.trim() || !projectName.trim()) {
       return;
     }
 
-    const generatedProjectName = buildProjectName(requirements);
-    const response = await generateDbml(requirements, generatedProjectName);
+    const response = await generateDbml(requirements, projectName);
     if (!response) {
       return;
     }
 
-    setProjectName(generatedProjectName);
     setDbmlCode(response.cleanDbmlCode);
     setSelectedProjectId(response.projectId);
     setGeneratedCode([]);
     setCurrentStep(2);
-  }, [requirements, generateDbml]);
+  }, [requirements, projectName, generateDbml]);
 
   const handleContinueFromSchema = useCallback(async () => {
     if (!dbmlCode.trim()) {
@@ -128,6 +131,32 @@ export default function App() {
     }
   }, [selectedProjectId, downloadGeneratedCode]);
 
+  const handleLoadProjects = useCallback(async () => {
+    setIsLoadingProjects(true);
+    const loadedProjects = await fetchProjects();
+    if (loadedProjects) {
+      setProjects(loadedProjects);
+    }
+    setIsLoadingProjects(false);
+  }, [fetchProjects]);
+
+  const handleSelectProject = useCallback((project: Project) => {
+    setProjectName(project.projectName);
+    setDbmlCode(project.cleanDbmlCode);
+    setSelectedProjectId(project.projectId);
+    setRequirements('');
+    setGeneratedCode([]);
+    setCurrentStep(2);
+  }, []);
+
+  const handleTabFillExamples = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      setProjectName('Course Management System');
+      setRequirements('Build a course management system with users, courses, enrollments, and payments.');
+    }
+  }, []);
+
   useEffect(() => {
     try {
       const schema = parseDBML(dbmlCode);
@@ -157,10 +186,32 @@ export default function App() {
         isSuccess={downloadSuccess}
       />
 
+      <ProjectSelectModal
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
+        projects={projects}
+        onSelectProject={handleSelectProject}
+        isLoading={isLoadingProjects}
+        onRefresh={handleLoadProjects}
+      />
+
       <header className="flex-shrink-0 border-b border-slate-700 bg-slate-800/60 backdrop-blur-sm">
-        <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold tracking-tight">DBArchitect Wizard</h1>
-          <p className="mt-1 text-sm text-slate-400">Complete one page at a time and continue to the next step.</p>
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">DBArchitect</h1>
+            <button
+              onClick={() => setIsProjectSelectorOpen(true)}
+              disabled={isBusy}
+              className="ml-2 flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-slate-700/50 text-slate-200 hover:bg-slate-600/50 border border-slate-600 hover:border-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Load existing project"
+              title="Load existing project"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400">
+                <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+              </svg>
+              Load Project
+            </button>
+          </div>
         </div>
       </header>
 
@@ -195,20 +246,38 @@ export default function App() {
           <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
             <h2 className="text-xl font-semibold">Input Requirements</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Describe your system requirements. We will generate DBML and move you to the schema step.
+              Enter a project name and describe your system requirements. We will generate DBML and move you to the schema step.
             </p>
 
-            <div className="mt-4">
-              <label htmlFor="requirements" className="mb-2 block text-sm font-medium text-slate-300">
-                Input Requirements
-              </label>
-              <textarea
-                id="requirements"
-                value={requirements}
-                onChange={(e) => setRequirements(e.target.value)}
-                placeholder="Example: Build a course management system with users, courses, enrollments, and payments."
-                className="h-64 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
-              />
+            <div className="mt-4 space-y-4">
+              <div>
+                <label htmlFor="projectName" className="mb-2 block text-sm font-medium text-slate-300">
+                  Project Name
+                </label>
+                <input
+                  id="projectName"
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  onKeyDown={handleTabFillExamples}
+                  placeholder="Example: Course Management System"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="requirements" className="mb-2 block text-sm font-medium text-slate-300">
+                  Requirements Description
+                </label>
+                <textarea
+                  id="requirements"
+                  value={requirements}
+                  onChange={(e) => setRequirements(e.target.value)}
+                  onKeyDown={handleTabFillExamples}
+                  placeholder="Example: Build a course management system with users, courses, enrollments, and payments."
+                  className="h-48 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
+                />
+              </div>
             </div>
 
             {error && <p className="mt-3 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
@@ -216,7 +285,7 @@ export default function App() {
             <div className="mt-5 flex justify-end">
               <button
                 onClick={handleGenerateSchema}
-                disabled={isBusy || !requirements.trim()}
+                disabled={isBusy || !requirements.trim() || !projectName.trim()}
                 className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-600"
               >
                 {isLoading ? 'Generating Schema...' : 'Continue to Schema Diagram'}
@@ -355,55 +424,61 @@ export default function App() {
         )}
 
         {currentStep === 4 && (
-          <div className="px-6 pb-6 overflow-auto h-full">
-          <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
-            <h2 className="text-xl font-semibold">Generated Code</h2>
-            <p className="mt-1 text-sm text-slate-400">Visualize generated files or download your code package.</p>
-            {projectName && <p className="mt-2 text-xs text-slate-500">Project: {projectName}</p>}
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+            <div className="overflow-auto px-6 pt-2 pb-4">
+              <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+                <h2 className="text-xl font-semibold">Generated Code</h2>
+                <p className="mt-1 text-sm text-slate-400">Visualize generated files or download your code package.</p>
+                {projectName && <p className="mt-2 text-xs text-slate-500">Project: {projectName}</p>}
 
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <button
-                onClick={() => setIsCodeModalOpen(true)}
-                disabled={generatedCode.length === 0}
-                className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-4 text-left transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <p className="font-semibold text-cyan-300">Visualize Code</p>
-                <p className="mt-1 text-xs text-slate-300">Open code viewer for generated files.</p>
-              </button>
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <button
+                    onClick={() => setIsCodeModalOpen(true)}
+                    disabled={generatedCode.length === 0}
+                    className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-4 text-left transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <p className="font-semibold text-cyan-300">Visualize Code</p>
+                    <p className="mt-1 text-xs text-slate-300">Open code viewer for generated files.</p>
+                  </button>
 
-              <button
-                onClick={handleDownloadCode}
-                disabled={!selectedProjectId || generatedCode.length === 0 || isDownloading}
-                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-left transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <p className="font-semibold text-emerald-300">Download Code</p>
-                <p className="mt-1 text-xs text-slate-300">Download ZIP package of generated backend.</p>
-              </button>
+                  <button
+                    onClick={handleDownloadCode}
+                    disabled={!selectedProjectId || generatedCode.length === 0 || isDownloading}
+                    className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-left transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <p className="font-semibold text-emerald-300">Download Code</p>
+                    <p className="mt-1 text-xs text-slate-300">Download ZIP package of generated backend.</p>
+                  </button>
+                </div>
 
-              <button
-                onClick={() => setCurrentStep(3)}
-                className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 text-left transition hover:bg-slate-700/50"
-              >
-                <p className="font-semibold text-slate-200">Back to Scaffold</p>
-                <p className="mt-1 text-xs text-slate-400">Change framework selections and re-generate.</p>
-              </button>
+                <div className="mt-5 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
+                  <p className="text-sm font-semibold text-slate-200">Generated Files ({generatedCode.length})</p>
+                  {generatedCode.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-400">No files generated yet.</p>
+                  ) : (
+                    <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 text-sm text-slate-300">
+                      {generatedCode.map((file) => (
+                        <li key={file.fileName}>{file.fileName}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {error && <p className="mt-4 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
+              </section>
             </div>
 
-            <div className="mt-5 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-              <p className="text-sm font-semibold text-slate-200">Generated Files ({generatedCode.length})</p>
-              {generatedCode.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-400">No files generated yet.</p>
-              ) : (
-                <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 text-sm text-slate-300">
-                  {generatedCode.map((file) => (
-                    <li key={file.fileName}>{file.fileName}</li>
-                  ))}
-                </ul>
-              )}
+            <div className="border-t border-slate-700 bg-slate-800">
+              <div className="flex items-center justify-between px-6 py-3">
+                <button
+                  onClick={() => setCurrentStep(3)}
+                  disabled={isBusy}
+                  className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Back
+                </button>
+              </div>
             </div>
-
-            {error && <p className="mt-4 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
-          </section>
           </div>
         )}
       </main>
