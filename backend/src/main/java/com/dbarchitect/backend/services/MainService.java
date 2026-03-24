@@ -121,119 +121,121 @@ public class MainService {
         return "text";
     }
 
-    public List<CodeChange> compareCode(Integer projectId, String newDbmlCode) throws Exception {
-        List<CodeChange> changes = new ArrayList<>();
+    public List<com.dbarchitect.backend.responses.FileDiff> compareCode(Integer projectId, String newDbmlCode) throws Exception {
+        List<com.dbarchitect.backend.responses.FileDiff> fileDiffs = new ArrayList<>();
 
         DesignProject project = designProjectRepository.findById(projectId.longValue()).orElse(null);
         if (project == null) {
-            changes.add(new CodeChange("N/A", "PROJECT", "NOT_FOUND", "Dự án không tồn tại"));
-            return changes;
+            com.dbarchitect.backend.responses.FileDiff fd = new com.dbarchitect.backend.responses.FileDiff();
+            fd.setPath("N/A");
+            fd.setOldContent(null);
+            fd.setNewContent(null);
+            fd.setChanges(Collections.singletonList(new CodeChange("N/A", "PROJECT", "NOT_FOUND", "Dự án không tồn tại")));
+            fileDiffs.add(fd);
+            return fileDiffs;
         }
+
         StringBuilder oldDbmlCode = new StringBuilder(project.getRawDbmlCode());
-        System.out.println(oldDbmlCode.toString());
         List<Map<String, String>> oldSourceCodeFiles = codeGenerator.generateFilesFromDbml(DBMLCode.extractCleanDbmlCode(oldDbmlCode.toString()));
         List<Map<String, String>> newSourceCodeFiles = codeGenerator.generateFilesFromDbml(newDbmlCode);
 
-                // Build maps keyed by path for easy pairing
-                Map<String, String> oldByPath = new HashMap<>();
-                for (Map<String, String> m : oldSourceCodeFiles) {
-                    String path = m.getOrDefault("path", "unknown");
-                    oldByPath.put(path, m.get("content"));
+        // Build maps keyed by path for easy pairing
+        Map<String, String> oldByPath = new HashMap<>();
+        for (Map<String, String> m : oldSourceCodeFiles) {
+            String path = m.getOrDefault("path", "unknown");
+            oldByPath.put(path, m.get("content"));
+        }
+        Map<String, String> newByPath = new HashMap<>();
+        for (Map<String, String> m : newSourceCodeFiles) {
+            String path = m.getOrDefault("path", "unknown");
+            newByPath.put(path, m.get("content"));
+        }
+
+        // Union of all file paths
+        var allPaths = new java.util.HashSet<String>();
+        allPaths.addAll(oldByPath.keySet());
+        allPaths.addAll(newByPath.keySet());
+
+        // Compare file-by-file
+        for (String path : allPaths) {
+            String oldContent = oldByPath.get(path);
+            String newContent = newByPath.get(path);
+
+            com.dbarchitect.backend.responses.FileDiff fd = new com.dbarchitect.backend.responses.FileDiff();
+            fd.setPath(path);
+            fd.setOldContent(oldContent);
+            fd.setNewContent(newContent);
+
+            List<CodeChange> changes = new ArrayList<>();
+
+            if (oldContent == null) {
+                CodeChange cc = new CodeChange(path, "FILE", "ADDED", "File added");
+                cc.setFilePath(path);
+                cc.setLineNumber(1);
+                changes.add(cc);
+                fd.setChanges(changes);
+                fileDiffs.add(fd);
+                continue;
+            }
+            if (newContent == null) {
+                CodeChange cc = new CodeChange(path, "FILE", "REMOVED", "File removed");
+                cc.setFilePath(path);
+                cc.setLineNumber(1);
+                changes.add(cc);
+                fd.setChanges(changes);
+                fileDiffs.add(fd);
+                continue;
+            }
+
+            // Both exist: parse and compare fields inside this file
+            List<CompilationUnit> cusOld = parsePossiblyMultiple(oldContent);
+            List<CompilationUnit> cusNew = parsePossiblyMultiple(newContent);
+            Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
+            Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
+
+            // Parse compilation units to find line numbers for fields
+            Map<String, Integer> fieldLinesOld = mapFieldToLine(cusOld);
+            Map<String, Integer> fieldLinesNew = mapFieldToLine(cusNew);
+
+            fieldsNew.forEach((name, type) -> {
+                if (!fieldsOld.containsKey(name)) {
+                    CodeChange cc = new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type);
+                    cc.setFilePath(path);
+                    cc.setLineNumber(fieldLinesNew.getOrDefault(name, 1));
+                    changes.add(cc);
+                } else if (!fieldsOld.get(name).equals(type)) {
+                    CodeChange cc = new CodeChange(name, "FIELD", "MODIFIED",
+                            "Đổi từ " + fieldsOld.get(name) + " sang " + type);
+                    cc.setFilePath(path);
+                    cc.setLineNumber(fieldLinesNew.getOrDefault(name, fieldLinesOld.getOrDefault(name, 1)));
+                    changes.add(cc);
                 }
-                Map<String, String> newByPath = new HashMap<>();
-                for (Map<String, String> m : newSourceCodeFiles) {
-                    String path = m.getOrDefault("path", "unknown");
-                    newByPath.put(path, m.get("content"));
+            });
+
+            fieldsOld.keySet().forEach(name -> {
+                if (!fieldsNew.containsKey(name)) {
+                    CodeChange cc = new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này");
+                    cc.setFilePath(path);
+                    cc.setLineNumber(fieldLinesOld.getOrDefault(name, 1));
+                    changes.add(cc);
                 }
+            });
 
-                // Union of all file paths
-                var allPaths = new java.util.HashSet<String>();
-                allPaths.addAll(oldByPath.keySet());
-                allPaths.addAll(newByPath.keySet());
+            fd.setChanges(changes);
+            fileDiffs.add(fd);
+        }
 
-                // Compare file-by-file
-                for (String path : allPaths) {
-                    String oldContent = oldByPath.get(path);
-                    String newContent = newByPath.get(path);
+        return fileDiffs;
+    }
 
-                    if (oldContent == null) {
-                        // New file added
-                        CodeChange cc = new CodeChange(path, "FILE", "ADDED", "File added");
-                        cc.setFilePath(path);
-                        cc.setLineNumber(1);
-                        changes.add(cc);
-                        continue;
-                    }
-                    if (newContent == null) {
-                        // File removed
-                        CodeChange cc = new CodeChange(path, "FILE", "REMOVED", "File removed");
-                        cc.setFilePath(path);
-                        cc.setLineNumber(1);
-                        changes.add(cc);
-                        continue;
-                    }
-
-                    // Both exist: parse and compare fields inside this file
-                    List<CompilationUnit> cusOld = parsePossiblyMultiple(oldContent);
-                    List<CompilationUnit> cusNew = parsePossiblyMultiple(newContent);
-                    Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
-                    Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
-
-                    // Parse compilation units to find line numbers for fields
-                    Map<String, Integer> fieldLinesOld = mapFieldToLine(cusOld);
-                    Map<String, Integer> fieldLinesNew = mapFieldToLine(cusNew);
-
-                    fieldsNew.forEach((name, type) -> {
-                        if (!fieldsOld.containsKey(name)) {
-                            CodeChange cc = new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type);
-                            cc.setFilePath(path);
-                            cc.setLineNumber(fieldLinesNew.getOrDefault(name, 1));
-                            changes.add(cc);
-                        } else if (!fieldsOld.get(name).equals(type)) {
-                            CodeChange cc = new CodeChange(name, "FIELD", "MODIFIED",
-                                    "Đổi từ " + fieldsOld.get(name) + " sang " + type);
-                            cc.setFilePath(path);
-                            cc.setLineNumber(fieldLinesNew.getOrDefault(name, fieldLinesOld.getOrDefault(name, 1)));
-                            changes.add(cc);
-                        }
-                    });
-
-                    fieldsOld.keySet().forEach(name -> {
-                        if (!fieldsNew.containsKey(name)) {
-                            CodeChange cc = new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này");
-                            cc.setFilePath(path);
-                            cc.setLineNumber(fieldLinesOld.getOrDefault(name, 1));
-                            changes.add(cc);
-                        }
-                    });
-                }
-
-//        // Parse possibly-multiple compilation units from each source
-//        List<CompilationUnit> cusOld = parsePossiblyMultiple(oldSourceCode);
-//        List<CompilationUnit> cusNew = parsePossiblyMultiple(newSourceCode);
-//
-//        // Extract fields from all compilation units
-//        Map<String, String> fieldsOld = extractFieldsFromCus(cusOld);
-//        Map<String, String> fieldsNew = extractFieldsFromCus(cusNew);
-//
-//        // 3. So sánh: Tìm cái mới thêm hoặc bị sửa
-//        fieldsNew.forEach((name, type) -> {
-//            if (!fieldsOld.containsKey(name)) {
-//                changes.add(new CodeChange(name, "FIELD", "ADDED", "Kiểu dữ liệu: " + type));
-//            } else if (!fieldsOld.get(name).equals(type)) {
-//                changes.add(new CodeChange(name, "FIELD", "MODIFIED",
-//                        "Đổi từ " + fieldsOld.get(name) + " sang " + type));
-//            }
-//        });
-//
-//        // 4. So sánh: Tìm cái bị xóa
-//        fieldsOld.keySet().forEach(name -> {
-//            if (!fieldsNew.containsKey(name)) {
-//                changes.add(new CodeChange(name, "FIELD", "REMOVED", "Đã xóa thuộc tính này"));
-//            }
-//        });
-
-        return changes;
+    // Backwards-compatible: flatten file diffs into a list of CodeChange objects
+    public List<CodeChange> compareCodeAsFlat(Integer projectId, String newDbmlCode) throws Exception {
+        List<com.dbarchitect.backend.responses.FileDiff> fds = compareCode(projectId, newDbmlCode);
+        List<CodeChange> flat = new ArrayList<>();
+        for (var fd : fds) {
+            if (fd.getChanges() != null) flat.addAll(fd.getChanges());
+        }
+        return flat;
     }
 
     // Try to parse the provided source string into one or more CompilationUnits.

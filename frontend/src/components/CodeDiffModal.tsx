@@ -8,6 +8,87 @@ interface CodeDiffModalProps {
   newDbmlCode: string;
 }
 
+interface FileCompareResult {
+  path: string;
+  oldContent: string;
+  newContent: string;
+  changes: CodeChange[];
+}
+
+const isFileCompareResult = (item: any): item is FileCompareResult => {
+  return (
+    item &&
+    typeof item.path === 'string' &&
+    typeof item.oldContent === 'string' &&
+    typeof item.newContent === 'string' &&
+    Array.isArray(item.changes)
+  );
+};
+
+const isCodeChange = (item: any): item is CodeChange => {
+  return (
+    item &&
+    typeof item.element === 'string' &&
+    typeof item.type === 'string' &&
+    typeof item.action === 'string' &&
+    typeof item.detail === 'string'
+  );
+};
+
+const getLineNumbersByAction = (changes: CodeChange[]) => {
+  const added = new Set<number>();
+  const removed = new Set<number>();
+  const modified = new Set<number>();
+
+  changes.forEach((change) => {
+    if (typeof change.lineNumber !== 'number') {
+      return;
+    }
+
+    if (change.action === 'ADDED') {
+      added.add(change.lineNumber);
+    } else if (change.action === 'REMOVED') {
+      removed.add(change.lineNumber);
+    } else if (change.action === 'MODIFIED') {
+      modified.add(change.lineNumber);
+    }
+  });
+
+  return { added, removed, modified };
+};
+
+const getLineClassName = (
+  side: 'old' | 'new',
+  lineNumber: number,
+  oldLine: string,
+  newLine: string,
+  marked: { added: Set<number>; removed: Set<number>; modified: Set<number> }
+) => {
+  if (marked.modified.has(lineNumber)) {
+    return 'bg-yellow-900/20';
+  }
+
+  if (side === 'new' && marked.added.has(lineNumber)) {
+    return 'bg-green-900/20';
+  }
+
+  if (side === 'old' && marked.removed.has(lineNumber)) {
+    return 'bg-red-900/20';
+  }
+
+  if (oldLine !== newLine) {
+    if (!oldLine && newLine && side === 'new') {
+      return 'bg-green-900/15';
+    }
+    if (oldLine && !newLine && side === 'old') {
+      return 'bg-red-900/15';
+    }
+    return 'bg-yellow-900/10';
+  }
+
+  return '';
+};
+
 const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, index }) => {
   const getActionClassName = (action: string) => {
     switch (action) {
@@ -91,9 +172,19 @@ const DiffLine: React.FC<{ change: CodeChange; index: number }> = ({ change, ind
 };
 
 export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeDiffModalProps) {
-  const [changes, setChanges] = useState<CodeChange[] | null>(null);
+  const [compareResults, setCompareResults] = useState<FileCompareResult[] | null>(null);
+  const [viewMode, setViewMode] = useState<'changes' | 'code'>('changes');
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedFile = compareResults?.find((f) => f.path === selectedPath) || compareResults?.[0] || null;
+  const selectedChanges = selectedFile?.changes || [];
+  const totalChanges = (compareResults || []).reduce((total, file) => total + file.changes.length, 0);
+  const oldLines = (selectedFile?.oldContent || '').split('\n');
+  const newLines = (selectedFile?.newContent || '').split('\n');
+  const maxLines = Math.max(oldLines.length, newLines.length);
+  const markedLines = getLineNumbersByAction(selectedChanges);
 
   useEffect(() => {
     if (!isOpen) {
@@ -101,7 +192,7 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
     }
 
     if (!projectId || !newDbmlCode.trim()) {
-      setChanges(null);
+      setCompareResults(null);
       setError('Missing projectId or new DBML code.');
       return;
     }
@@ -124,14 +215,32 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
           throw new Error(errorText || `Backend error: ${response.status}`);
         }
 
-        const result: CodeChange[] = await response.json();
+        const result = await response.json();
 
         if (isMounted) {
-          setChanges(Array.isArray(result) ? result : []);
+          if (Array.isArray(result) && result.every(isFileCompareResult)) {
+            setCompareResults(result);
+            setSelectedPath(result[0]?.path || null);
+          } else if (Array.isArray(result) && result.every(isCodeChange)) {
+            // Backward compatibility: old endpoint returned flat CodeChange[]
+            const fallback: FileCompareResult[] = [
+              {
+                path: 'All files',
+                oldContent: '',
+                newContent: '',
+                changes: result,
+              },
+            ];
+            setCompareResults(fallback);
+            setSelectedPath(fallback[0].path);
+          } else {
+            setCompareResults([]);
+            setSelectedPath(null);
+          }
         }
       } catch (e: any) {
         if (isMounted) {
-          setChanges(null);
+          setCompareResults(null);
           setError(e.message || 'Failed to compare DBML changes.');
         }
       } finally {
@@ -150,7 +259,7 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
 
   if (!isOpen) return null;
 
-  const hasChanges = changes && changes.length > 0;
+  const hasChanges = totalChanges > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -164,7 +273,7 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
             <h2 className="text-lg font-semibold text-slate-100">Code Comparison</h2>
             {hasChanges && (
               <span className="ml-auto text-xs px-2 py-1 bg-slate-700 text-slate-300 rounded">
-                {changes.length} change{changes.length !== 1 ? 's' : ''}
+                {totalChanges} change{totalChanges !== 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -178,6 +287,55 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
             </svg>
           </button>
         </div>
+
+        {/* View mode */}
+        <div className="flex-shrink-0 px-6 py-3 border-b border-slate-700 flex gap-2">
+          <button
+            onClick={() => setViewMode('changes')}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              viewMode === 'changes'
+                ? 'bg-cyan-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Changes
+          </button>
+          <button
+            onClick={() => setViewMode('code')}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              viewMode === 'code'
+                ? 'bg-cyan-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Side-by-Side
+          </button>
+        </div>
+
+        {/* File selector */}
+        {compareResults && compareResults.length > 0 && (
+          <div className="flex-shrink-0 px-6 py-3 border-b border-slate-700 bg-slate-900/50 overflow-x-auto">
+            <div className="flex gap-2">
+              {compareResults.map((file) => {
+                const shortName = file.path.split('/').pop() || file.path;
+                return (
+                  <button
+                    key={file.path}
+                    onClick={() => setSelectedPath(file.path)}
+                    className={`px-3 py-1 text-xs font-mono rounded whitespace-nowrap transition-colors ${
+                      selectedPath === file.path
+                        ? 'bg-cyan-500 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                    title={file.path}
+                  >
+                    {shortName} {file.changes.length > 0 ? `(${file.changes.length})` : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-grow overflow-auto">
@@ -197,15 +355,77 @@ export function CodeDiffModal({ isOpen, onClose, projectId, newDbmlCode }: CodeD
                 {error}
               </div>
             </div>
-          ) : hasChanges ? (
+          ) : viewMode === 'changes' ? (
             <div className="divide-y divide-slate-700">
-              {changes.map((change, index) => (
-                <DiffLine
-                  key={`${change.filePath || 'unknown'}-${change.lineNumber || 0}-${change.element}-${index}`}
-                  change={change}
-                  index={index}
-                />
-              ))}
+              {selectedFile && selectedFile.path !== 'All files' && (
+                <div className="px-4 py-3 text-xs font-mono text-slate-400 bg-slate-900/30">
+                  {selectedFile.path}
+                </div>
+              )}
+              {selectedChanges.length > 0 ? (
+                selectedChanges.map((change, index) => (
+                  <DiffLine
+                    key={`${change.filePath || selectedFile?.path || 'unknown'}-${change.lineNumber || 0}-${change.element}-${index}`}
+                    change={change}
+                    index={index}
+                  />
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-48 text-slate-400">
+                  No element-level changes in this file.
+                </div>
+              )}
+            </div>
+          ) : selectedFile ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 h-full">
+              <div className="border-r border-slate-700 flex flex-col min-h-0">
+                <div className="px-4 py-2 border-b border-slate-700 bg-slate-900/40 text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                  Old Content
+                </div>
+                <div className="flex-1 overflow-auto bg-slate-900/30 font-mono text-xs text-slate-200">
+                  {Array.from({ length: maxLines }).map((_, index) => {
+                    const lineNumber = index + 1;
+                    const oldLine = oldLines[index] ?? '';
+                    const newLine = newLines[index] ?? '';
+                    const lineClass = getLineClassName('old', lineNumber, oldLine, newLine, markedLines);
+
+                    return (
+                      <div key={`old-${lineNumber}`} className={`flex ${lineClass}`}>
+                        <div className="w-12 shrink-0 px-2 py-0.5 text-right text-slate-500 border-r border-slate-700/70 select-none">
+                          {oldLine ? lineNumber : ''}
+                        </div>
+                        <div className="flex-1 px-3 py-0.5 whitespace-pre-wrap break-words">
+                          {oldLine || ' '}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-col min-h-0">
+                <div className="px-4 py-2 border-b border-slate-700 bg-slate-900/40 text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                  New Content
+                </div>
+                <div className="flex-1 overflow-auto bg-slate-900/30 font-mono text-xs text-slate-200">
+                  {Array.from({ length: maxLines }).map((_, index) => {
+                    const lineNumber = index + 1;
+                    const oldLine = oldLines[index] ?? '';
+                    const newLine = newLines[index] ?? '';
+                    const lineClass = getLineClassName('new', lineNumber, oldLine, newLine, markedLines);
+
+                    return (
+                      <div key={`new-${lineNumber}`} className={`flex ${lineClass}`}>
+                        <div className="w-12 shrink-0 px-2 py-0.5 text-right text-slate-500 border-r border-slate-700/70 select-none">
+                          {newLine ? lineNumber : ''}
+                        </div>
+                        <div className="flex-1 px-3 py-0.5 whitespace-pre-wrap break-words">
+                          {newLine || ' '}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400">
