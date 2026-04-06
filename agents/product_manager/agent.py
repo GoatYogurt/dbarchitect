@@ -2,11 +2,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from product_manager.prompt import PRODUCT_MANAGER_PROMPT
 from state import AgentState
-from schemas import SystemSpec
+from schemas import PMResponse
 
 class ProductManagerAgent:
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2).with_structured_output(SystemSpec)
+        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0).with_structured_output(PMResponse)
 
     
     def run(self, state: AgentState):
@@ -19,13 +19,16 @@ class ProductManagerAgent:
             ]
         )
 
-        chain = prompt | self.llm
-        spec = chain.invoke({"user_input": state["user_input"]})
-        formatted_spec = f"Project Name: {spec.project_name}\n\nEntities:\n"
+        # chain = prompt | self.llm
+        # spec = chain.invoke({"user_input": state["user_input"]})
+        # formatted_spec = f"Project Name: {spec.project_name}\n\nEntities:\n"
 
-        for entity in spec.entities:
-            formatted_spec += f"- Table {entity.name}: {entity.description}\n  Fields: {', '.join(entity.fields)}\n"
+        # for entity in spec.entities:
+        #     formatted_spec += f"- Table {entity.name}: {entity.description}\n  Fields: {', '.join(entity.fields)}\n"
 
-        formatted_spec += f"\nRelationships: {', '.join(spec.relationships)}"
+        # formatted_spec += f"\nRelationships: {', '.join(spec.relationships)}"
 
-        return {"specifications": formatted_spec}
+        # return {"specifications": formatted_spec}
+
+        response = self.llm.invoke(prompt.format(user_input=state["user_input"]))
+        return {"pm_response": response}

@@ -18,6 +18,7 @@ async def run_agent(request: UserRequest):
         "dbml_code": "",
         "errors": [],
         "iteration": 0,
+        "pm_response": None
     }
 
     result = await agent_graph.ainvoke(inital_state)
@@ -25,7 +26,9 @@ async def run_agent(request: UserRequest):
     return {
         "status": "success",
         "data": {
-            "specifications": result.get("specifications"),
+            "is_clear": result.get("pm_response").is_clear if result.get("pm_response") else None,
+            "questions": result.get("pm_response").questions if result.get("pm_response") else None,
+            "specifications": result.get("pm_response").spec if result.get("pm_response") else None,
             "dbml_code": result.get("dbml_code"),
             "final_state": "completed"
         }
