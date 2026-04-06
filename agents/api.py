@@ -1,14 +1,19 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from main import app as agent_graph
+from typing import List, Optional, Union
 
 from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
 
+class UserAnswer(BaseModel):
+    question_text: str
+    answer: Union[str, List[str]]  # answer can be a string or a list of strings depending on the question type
 class UserRequest(BaseModel):
     user_input: str
+    answers: Optional[List[UserAnswer]] = []  # list of answers to PM questions, optional for the initial request
 
 @app.post("/generate-db-spec")
 async def run_agent(request: UserRequest):
@@ -18,7 +23,8 @@ async def run_agent(request: UserRequest):
         "dbml_code": "",
         "errors": [],
         "iteration": 0,
-        "pm_response": None
+        "pm_response": None,
+        "answers": [answer.model_dump() for answer in request.answers]  # convert UserAnswer models to dicts
     }
 
     result = await agent_graph.ainvoke(inital_state)

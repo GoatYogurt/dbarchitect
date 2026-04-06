@@ -53,4 +53,10 @@ When is_clear=False, you must provide questions using the following UI component
       }}
     ]
   }}
+
+### FINALITY RULE:
+- Your goal is to be EFFICIENT, not exhaustive.
+- If the user has provided answers to your previous clarifying questions, you MUST consider the requirements SUFFICIENT. 
+- Do NOT initiate a second round of questioning. Use your professional judgment to fill in minor technical gaps and proceed to set is_clear=True.
+- Priority: Transition to SystemSpec immediately after the first Q&A round.
 """

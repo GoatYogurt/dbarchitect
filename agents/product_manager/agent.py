@@ -11,13 +11,21 @@ class ProductManagerAgent:
     
     def run(self, state: AgentState):
         print("Product Manager Agent is processing the user input...")
+        user_req = state.get("user_input", "")
+        past_answers = state.get("answers", [])
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", PRODUCT_MANAGER_PROMPT),
-                ("user", "Based on the following user input, write clear technical specifications for the database design:\n\n{user_input}"),
-            ]
-        )
+        context_str = ""
+        if past_answers:
+            context_str += "\nAdditional user answers:\n"
+            for ans in past_answers:
+                context_str += f'Question: {ans["question_text"]}\nAnswer: {ans["answer"]}\n'
+
+        # prompt = ChatPromptTemplate.from_messages(
+        #     [
+        #         ("system", PRODUCT_MANAGER_PROMPT),
+        #         ("user", "Based on the following user input, write clear technical specifications for the database design:\n\n{user_input}"),
+        #     ]
+        # )
 
         # chain = prompt | self.llm
         # spec = chain.invoke({"user_input": state["user_input"]})
@@ -30,5 +38,13 @@ class ProductManagerAgent:
 
         # return {"specifications": formatted_spec}
 
-        response = self.llm.invoke(prompt.format(user_input=state["user_input"]))
+        prompt = f"""
+        Original user input: {user_req}
+        {context_str}
+        """
+
+        response = self.llm.invoke([
+            ("system", PRODUCT_MANAGER_PROMPT),
+            ("user", prompt)
+        ]        )
         return {"pm_response": response}
