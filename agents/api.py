@@ -1,10 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from main import app as agent_graph
 from typing import List, Optional, Union
 
-from dotenv import load_dotenv
-load_dotenv()
 
 app = FastAPI()
 

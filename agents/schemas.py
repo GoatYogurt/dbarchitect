@@ -19,6 +19,7 @@ class QuestionComponent(BaseModel):
     type: Literal["multi_choice", "single_choice", "text"] = Field(description="The type of question to ask the user")
     options: Optional[List[str]] = Field(default=None, description="If the question is multiple choice or single choice, provide the options for the user to select from")
 
+
 class PMResponse(BaseModel):
     is_clear: bool = Field(description="PM evaluates if the specifications are clear and actionable")
     questions: Optional[List[QuestionComponent]] = Field(default=[], description="PM lists any questions or clarifications needed to improve the specifications")

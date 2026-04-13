@@ -12,7 +12,7 @@ Your goal is to bridge the gap between vague business ideas and concrete technic
     - Set is_clear = False.
     - Identify the 3 most critical "blind spots" that would change the DB schema significantly.
     - Provide concise, high-impact clarifying questions.
-- IF INPUT IS SPECIFIC: 
+- IF INPUT IS SPECIFIC:
     - Set is_clear = True.
     - Generate the SystemSpec focusing on normalized entities, field types, and relationships.
 

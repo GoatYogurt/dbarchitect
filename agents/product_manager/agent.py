@@ -3,10 +3,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from product_manager.prompt import PRODUCT_MANAGER_PROMPT
 from state import AgentState
 from schemas import PMResponse
-
+from langchain_groq import ChatGroq
 class ProductManagerAgent:
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0).with_structured_output(PMResponse)
+        self.llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=2).with_structured_output(PMResponse)
 
     
     def run(self, state: AgentState):

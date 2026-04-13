@@ -1,6 +1,6 @@
 package com.dbarchitect.backend.controllers;
 
-import com.dbarchitect.backend.responses.FileDiff;
+import com.dbarchitect.backend.entities.CodeChange;
 import com.dbarchitect.backend.entities.FileNode;
 import com.dbarchitect.backend.requests.CompareRequest;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
@@ -102,9 +102,9 @@ public class MainController {
     }
 
     @PostMapping("/compare")
-    public ResponseEntity<List<FileDiff>> getDiff(@RequestBody CompareRequest req) throws Exception {
+    public ResponseEntity<List<CodeChange>> getDiff(@RequestBody CompareRequest req) throws Exception {
         // req chứa oldCode và newCode
-        List<FileDiff> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
+        List<CodeChange> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
         return ResponseEntity.ok(diffResults);
     }
 
