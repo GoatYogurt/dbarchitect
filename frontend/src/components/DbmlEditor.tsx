@@ -10,13 +10,14 @@ interface DbmlEditorProps {
   onChange: (value: string) => void;
   onSave?: () => void;
   onCompare?: () => void;
+  onToggleCollapse?: () => void;
   isSaving?: boolean;
   isComparing?: boolean;
   canSave?: boolean;
   canCompare?: boolean;
 }
 
-export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = false, isComparing = false, canSave = false, canCompare = false }: DbmlEditorProps) {
+export function DbmlEditor({ value, onChange, onSave, onCompare, onToggleCollapse, isSaving = false, isComparing = false, canSave = false, canCompare = false }: DbmlEditorProps) {
   const handleBeforeMount = (monaco: Monaco) => {
     registerDBMLLanguage(monaco);
   };
@@ -25,7 +26,7 @@ export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = fals
     <div className="h-full bg-slate-800 rounded-lg shadow-inner flex flex-col overflow-hidden border border-slate-700">
       <div className="flex items-center gap-2 p-3 bg-slate-900/50 border-b border-slate-700">
         <CodeIcon className="w-5 h-5 text-emerald-400" />
-        <h2 className="font-semibold text-slate-200">2. Review DBML</h2>
+        <h2 className="font-semibold text-slate-200">DBML Editor</h2>
         {onSave && (
           <button
             onClick={onSave}
@@ -74,6 +75,15 @@ export function DbmlEditor({ value, onChange, onSave, onCompare, isSaving = fals
                 Compare
               </>
             )}
+          </button>
+        )}
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="ml-auto flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-slate-700 text-slate-200 rounded-md shadow hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-opacity-75 transition-all duration-200"
+            aria-label="Minimize DBML editor"
+          >
+            Minimize
           </button>
         )}
       </div>

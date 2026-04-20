@@ -1,20 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DbmlEditor } from './components/DbmlEditor';
 import { SchemaVisualizer } from './components/SchemaVisualizer';
+import { ChatPanel } from './components/ChatPanel';
 import { useBackend } from './hooks/useBackend';
 import { parseDBML } from './services/dbmlParser';
-import { ParsedSchema, GeneratedFile, Project, ClarificationAnswer, ClarificationQuestion } from './types';
+import { ParsedSchema, GeneratedFile, Project, ClarificationAnswer, ClarificationQuestion, ChatMessage } from './types';
 import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
 import { ProjectSelectModal } from './components/ProjectSelectModal';
 import { CodeDiffModal } from './components/CodeDiffModal';
 
-type WizardStep = 1 | 2 | 3 | 4;
+const WELCOME_MESSAGE = 'Describe the system you want to model. I will ask for missing details and keep the DBML canvas in sync.';
+
+const createChatMessage = (role: ChatMessage['role'], content: string): ChatMessage => ({
+  id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  role,
+  content,
+});
 
 export default function App() {
-  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
-  const [requirements, setRequirements] = useState<string>('');
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
+  const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
+  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => [
+    createChatMessage('assistant', WELCOME_MESSAGE),
+  ]);
   const [projectName, setProjectName] = useState<string>('');
   const [dbmlCode, setDbmlCode] = useState<string>('');
   const [originalDbmlCode, setOriginalDbmlCode] = useState<string>('');
@@ -32,12 +43,10 @@ export default function App() {
   const [clarificationQuestions, setClarificationQuestions] = useState<ClarificationQuestion[]>([]);
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<number, string | string[]>>({});
   const [clarificationError, setClarificationError] = useState<string | null>(null);
-
-  const [selectedBackendFramework, setSelectedBackendFramework] = useState<string>('spring-boot');
-  const [selectedFrontendFramework, setSelectedFrontendFramework] = useState<string>('none');
+  const [conversationSeed, setConversationSeed] = useState<string>('');
 
   const {
-    generateDbml,
+    chatWithAgent,
     isLoading,
     generateSpringBootCode,
     isCodeLoading,
@@ -48,45 +57,35 @@ export default function App() {
     fetchProjects,
   } = useBackend();
 
-  const isBusy = isLoading || isCodeLoading || isDbmlUpdating;
+  const isWorkspaceBusy = isCodeLoading || isDbmlUpdating || isLoadingProjects;
   const hasDbmlChanged = useMemo(
     () => dbmlCode.trim() !== originalDbmlCode.trim(),
     [dbmlCode, originalDbmlCode]
   );
 
-  const steps = useMemo(
-    () => [
-      { id: 1 as WizardStep, title: 'Input Requirements' },
-      { id: 2 as WizardStep, title: 'Schema Diagram' },
-      { id: 3 as WizardStep, title: 'Scaffold Code' },
-      { id: 4 as WizardStep, title: 'Generated Code' },
-    ],
-    []
+  const canSendPrompt = useMemo(
+    () => Boolean(chatPrompt.trim()) && Boolean(projectName.trim()) && clarificationQuestions.length === 0,
+    [chatPrompt, clarificationQuestions.length, projectName]
   );
-
-  const areClarificationAnswersComplete = useMemo(() => {
-    if (clarificationQuestions.length === 0) {
-      return true;
-    }
-
-    return clarificationQuestions.every((question, index) => {
-      const answer = clarificationAnswers[index];
-      if (question.type === 'text') {
-        return typeof answer === 'string' && answer.trim().length > 0;
-      }
-      if (question.type === 'single_choice') {
-        return typeof answer === 'string' && answer.trim().length > 0;
-      }
-
-      return Array.isArray(answer) && answer.length > 0;
-    });
-  }, [clarificationAnswers, clarificationQuestions]);
 
   const resetClarificationFlow = useCallback(() => {
     setClarificationQuestions([]);
     setClarificationAnswers({});
     setClarificationError(null);
+    setConversationSeed('');
   }, []);
+
+  const resetWorkspace = useCallback(() => {
+    resetClarificationFlow();
+    setChatPrompt('');
+    setChatMessages([createChatMessage('assistant', WELCOME_MESSAGE)]);
+    setProjectName('');
+    setDbmlCode('');
+    setOriginalDbmlCode('');
+    setGeneratedCode([]);
+    setSelectedProjectId(null);
+    setIsEditorCollapsed(false);
+  }, [resetClarificationFlow]);
 
   const updateSingleChoiceAnswer = useCallback((index: number, value: string) => {
     setClarificationAnswers((prev) => ({ ...prev, [index]: value }));
@@ -145,23 +144,53 @@ export default function App() {
     return payload;
   }, [clarificationAnswers, clarificationQuestions]);
 
-  const handleGenerateSchema = useCallback(async () => {
-    if (!requirements.trim() || !projectName.trim()) {
+  const applyGeneratedDbml = useCallback((nextDbmlCode: string, assistantMessage: string) => {
+    resetClarificationFlow();
+    setDbmlCode(nextDbmlCode);
+    setOriginalDbmlCode(nextDbmlCode);
+    setSelectedProjectId(null);
+    setGeneratedCode([]);
+    setChatMessages((prev) => [...prev, createChatMessage('assistant', assistantMessage)]);
+  }, [resetClarificationFlow]);
+
+  const handleSendPrompt = useCallback(async () => {
+    const prompt = chatPrompt.trim();
+    if (!prompt || !projectName.trim() || clarificationQuestions.length > 0) {
       return;
     }
 
     setClarificationError(null);
+    setChatMessages((prev) => [...prev, createChatMessage('user', prompt)]);
+    setConversationSeed(prompt);
 
-    let answers: ClarificationAnswer[] = [];
-    if (clarificationQuestions.length > 0) {
-      const payload = buildClarificationPayload();
-      if (!payload) {
-        return;
-      }
-      answers = payload;
+    const response = await chatWithAgent(prompt, projectName, []);
+    if (!response) {
+      return;
     }
 
-    const response = await generateDbml(requirements, projectName, answers);
+    setChatPrompt('');
+
+    if (!response.isClear) {
+      setClarificationQuestions(response.questions);
+      setClarificationAnswers({});
+      setChatMessages((prev) => [...prev, createChatMessage('assistant', 'I need a few clarifications before I can generate the DBML. Answer the questions below to continue.')]);
+      return;
+    }
+
+    applyGeneratedDbml(response.cleanDbmlCode, 'DBML generated and rendered in the canvas.');
+  }, [applyGeneratedDbml, chatPrompt, chatWithAgent, clarificationQuestions.length, projectName]);
+
+  const handleSubmitClarifications = useCallback(async () => {
+    if (!conversationSeed || clarificationQuestions.length === 0 || !projectName.trim()) {
+      return;
+    }
+
+    const payload = buildClarificationPayload();
+    if (!payload) {
+      return;
+    }
+
+    const response = await chatWithAgent(conversationSeed, projectName, payload);
     if (!response) {
       return;
     }
@@ -169,40 +198,15 @@ export default function App() {
     if (!response.isClear) {
       setClarificationQuestions(response.questions);
       setClarificationAnswers({});
-      setDbmlCode('');
-      setOriginalDbmlCode('');
-      setGeneratedCode([]);
-      setSelectedProjectId(null);
+      setChatMessages((prev) => [...prev, createChatMessage('assistant', 'I still need a little more detail before I can finalize the DBML.')]);
       return;
     }
 
-    resetClarificationFlow();
-    setDbmlCode(response.cleanDbmlCode);
-    setOriginalDbmlCode(response.cleanDbmlCode);
-    setSelectedProjectId(null);
-    setGeneratedCode([]);
-    setCurrentStep(2);
-  }, [requirements, projectName, clarificationQuestions.length, buildClarificationPayload, generateDbml, resetClarificationFlow]);
-
-  const handleContinueFromSchema = useCallback(async () => {
-    if (!dbmlCode.trim()) {
-      return;
-    }
-
-    if (selectedProjectId) {
-      const success = await updateDbml(selectedProjectId, dbmlCode);
-      if (!success) {
-        return;
-      }
-
-      setOriginalDbmlCode(dbmlCode);
-    }
-
-    setCurrentStep(3);
-  }, [dbmlCode, selectedProjectId, updateDbml]);
+    applyGeneratedDbml(response.cleanDbmlCode, 'DBML generated from your answers and rendered in the canvas.');
+  }, [applyGeneratedDbml, buildClarificationPayload, chatWithAgent, clarificationQuestions.length, conversationSeed, projectName]);
 
   const handleScaffoldCode = useCallback(async () => {
-    if (!dbmlCode.trim() || selectedBackendFramework !== 'spring-boot') {
+    if (!dbmlCode.trim()) {
       return;
     }
 
@@ -212,8 +216,11 @@ export default function App() {
     }
 
     setGeneratedCode(files);
-    setCurrentStep(4);
-  }, [dbmlCode, selectedBackendFramework, generateSpringBootCode]);
+    setChatMessages((prev) => [
+      ...prev,
+      createChatMessage('system', `Generated ${files.length} Spring Boot file${files.length === 1 ? '' : 's'}. Open the code viewer to inspect the scaffold.`),
+    ]);
+  }, [dbmlCode, generateSpringBootCode]);
 
   const handleDownloadCode = useCallback(async () => {
     if (!selectedProjectId) {
@@ -249,32 +256,39 @@ export default function App() {
     setDbmlCode(project.cleanDbmlCode);
     setOriginalDbmlCode(project.cleanDbmlCode);
     setSelectedProjectId(project.projectId);
-    setRequirements('');
+    setChatPrompt('');
+    setConversationSeed('');
     setGeneratedCode([]);
-    setCurrentStep(2);
+    setIsEditorCollapsed(false);
+    setChatMessages([
+      createChatMessage('assistant', `Loaded ${project.projectName}. The DBML is now available for editing, saving, or comparison.`),
+    ]);
   }, [resetClarificationFlow]);
 
   const handleCreateNewProject = useCallback(() => {
-    resetClarificationFlow();
-    setProjectName('');
-    setRequirements('');
-    setDbmlCode('');
-    setOriginalDbmlCode('');
-    setSelectedProjectId(null);
-    setGeneratedCode([]);
-    setCurrentStep(1);
-  }, [resetClarificationFlow]);
+    resetWorkspace();
+  }, [resetWorkspace]);
 
-  const handleTabFillExamples = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      resetClarificationFlow();
-      setProjectName('Course Management System');
-      setRequirements('Build a course management system with users, courses, enrollments, and payments.');
+  const handleSaveDbml = useCallback(async () => {
+    if (!selectedProjectId || !dbmlCode.trim()) {
+      return;
     }
-  }, [resetClarificationFlow]);
+
+    const success = await updateDbml(selectedProjectId, dbmlCode);
+    if (!success) {
+      return;
+    }
+
+    setOriginalDbmlCode(dbmlCode);
+    setChatMessages((prev) => [...prev, createChatMessage('system', 'DBML changes were saved to the selected project.')]);
+  }, [dbmlCode, selectedProjectId, updateDbml]);
 
   useEffect(() => {
+    if (!dbmlCode.trim()) {
+      setParsedSchema({ tables: [], refs: [] });
+      return;
+    }
+
     try {
       const schema = parseDBML(dbmlCode);
       setParsedSchema(schema);
@@ -285,7 +299,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-900 text-slate-100">
-      {isBusy && <Loader />}
+      {isWorkspaceBusy && <Loader />}
 
       <CodeGenerationModal
         isOpen={isCodeModalOpen}
@@ -320,373 +334,141 @@ export default function App() {
         onRefresh={handleLoadProjects}
       />
 
-      <header className="flex-shrink-0 border-b border-slate-700 bg-slate-800/60 backdrop-blur-sm">
-        <div className="px-6 py-4 flex items-center justify-between">
+      <header className="flex-shrink-0 border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">DBArchitect</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-50">DBArchitect</h1>
+            <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
+              Workspace
+            </span>
             <button
               onClick={() => setIsProjectSelectorOpen(true)}
-              disabled={isBusy}
-              className="ml-2 flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-slate-700/50 text-slate-200 hover:bg-slate-600/50 border border-slate-600 hover:border-purple-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isWorkspaceBusy}
+              className="ml-2 flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-cyan-500 hover:bg-slate-700/70 disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Load project"
               title="Load a project"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-300">
                 <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
               </svg>
               {projectName ? projectName : 'Load Project'}
             </button>
           </div>
+
+          <div className="text-right">
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Current Project</p>
+            <p className="mt-1 text-sm font-semibold text-slate-200">{projectName || 'Untitled workspace'}</p>
+          </div>
         </div>
       </header>
 
-      <div className="flex-shrink-0 px-6 py-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {steps.map((step) => {
-            const isActive = currentStep === step.id;
-            const isDone = currentStep > step.id;
-
-            return (
-              <div
-                key={step.id}
-                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                  isActive
-                    ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300'
-                    : isDone
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                      : 'border-slate-700 bg-slate-800/70 text-slate-400'
-                }`}
-              >
-                <p className="text-xs uppercase tracking-wide">Step {step.id}</p>
-                <p className="font-semibold">{step.title}</p>
-              </div>
-            );
-          })}
+      <div className="flex-shrink-0 border-b border-slate-800 bg-slate-900/75 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-slate-300">
+            <span className="uppercase tracking-[0.25em] text-slate-500">Schema</span>
+            <span className="ml-2 text-cyan-300">{dbmlCode.trim() ? 'Rendered' : 'Waiting for chat'}</span>
+          </div>
+          {selectedProjectId && (
+            <div className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-slate-300">
+              Linked to project #{selectedProjectId}
+            </div>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleScaffoldCode}
+              disabled={isWorkspaceBusy || !dbmlCode.trim()}
+              className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              Scaffold Code
+            </button>
+            <button
+              onClick={() => setIsCodeModalOpen(true)}
+              disabled={generatedCode.length === 0}
+              className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              View Generated Code
+            </button>
+            <button
+              onClick={handleDownloadCode}
+              disabled={isWorkspaceBusy || !selectedProjectId || isDownloading}
+              className="rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              Download Code
+            </button>
+            <button
+              onClick={() => setIsDiffModalOpen(true)}
+              disabled={isWorkspaceBusy || !selectedProjectId || !dbmlCode.trim() || !hasDbmlChanged}
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+              title={hasDbmlChanged ? 'Compare changes' : 'Edit DBML to enable comparison'}
+            >
+              Compare Changes
+            </button>
+          </div>
         </div>
       </div>
 
-      <main className="flex-grow overflow-hidden">
-        {currentStep === 1 && (
-          <div className="px-6 pb-6 overflow-auto h-full">
-          <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
-            <h2 className="text-xl font-semibold">Input Requirements</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Enter a project name and describe your system requirements. If the request is unclear, answer the follow-up questions and submit again.
-            </p>
+      <main className="flex min-h-0 flex-1 overflow-hidden">
+        <ChatPanel
+          isCollapsed={isChatCollapsed}
+          onToggleCollapse={() => setIsChatCollapsed((prev) => !prev)}
+          projectName={projectName}
+          onProjectNameChange={setProjectName}
+          messages={chatMessages}
+          prompt={chatPrompt}
+          onPromptChange={setChatPrompt}
+          onSendPrompt={handleSendPrompt}
+          canSendPrompt={canSendPrompt}
+          isSending={isLoading}
+          clarificationQuestions={clarificationQuestions}
+          clarificationAnswers={clarificationAnswers}
+          onUpdateSingleChoiceAnswer={updateSingleChoiceAnswer}
+          onUpdateTextAnswer={updateTextAnswer}
+          onUpdateMultiChoiceAnswer={updateMultiChoiceAnswer}
+          onSubmitClarifications={handleSubmitClarifications}
+          clarificationError={clarificationError}
+          error={error}
+          isThinking={isLoading}
+        />
 
-            <div className="mt-4 space-y-4">
-              <div>
-                <label htmlFor="projectName" className="mb-2 block text-sm font-medium text-slate-300">
-                  Project Name
-                </label>
-                <input
-                  id="projectName"
-                  type="text"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  onKeyDown={handleTabFillExamples}
-                  placeholder="Example: Course Management System"
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="requirements" className="mb-2 block text-sm font-medium text-slate-300">
-                  Requirements Description
-                </label>
-                <textarea
-                  id="requirements"
-                  value={requirements}
-                  onChange={(e) => {
-                    resetClarificationFlow();
-                    setRequirements(e.target.value);
-                  }}
-                  onKeyDown={handleTabFillExamples}
-                  placeholder="Example: Build a course management system with users, courses, enrollments, and payments."
-                  className="h-48 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
-                />
-              </div>
-
-              {clarificationQuestions.length > 0 && (
-                <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Clarification Questions</h3>
-                  <p className="mt-1 text-sm text-slate-300">
-                    Please answer all questions below, then submit again.
-                  </p>
-
-                  <div className="mt-4 space-y-4">
-                    {clarificationQuestions.map((question, index) => (
-                      <div key={`${question.question_text}-${index}`} className="rounded-md border border-slate-700 bg-slate-900/50 p-3">
-                        <p className="text-sm font-medium text-slate-100">{index + 1}. {question.question_text}</p>
-
-                        {question.type === 'multi_choice' && (
-                          <div className="mt-3 space-y-2">
-                            {(question.options || []).map((option) => {
-                              const current = Array.isArray(clarificationAnswers[index]) ? (clarificationAnswers[index] as string[]) : [];
-                              const checked = current.includes(option);
-
-                              return (
-                                <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => updateMultiChoiceAnswer(index, option, e.target.checked)}
-                                  />
-                                  {option}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {question.type === 'single_choice' && (
-                          <div className="mt-3 space-y-2">
-                            {(question.options || []).map((option) => (
-                              <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
-                                <input
-                                  type="radio"
-                                  name={`single-choice-question-${index}`}
-                                  checked={clarificationAnswers[index] === option}
-                                  onChange={() => updateSingleChoiceAnswer(index, option)}
-                                />
-                                {option}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-
-                        {question.type === 'text' && (
-                          <textarea
-                            value={typeof clarificationAnswers[index] === 'string' ? clarificationAnswers[index] as string : ''}
-                            onChange={(e) => updateTextAnswer(index, e.target.value)}
-                            placeholder="Type your answer"
-                            className="mt-3 h-24 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-900/70">
+          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-violet-300">Canvas</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-100">DBML visualizer</h2>
             </div>
-
-            {error && <p className="mt-3 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
-            {clarificationError && <p className="mt-3 rounded-md border border-amber-800 bg-amber-900/30 px-3 py-2 text-sm text-amber-200">{clarificationError}</p>}
-
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={handleGenerateSchema}
-                disabled={isBusy || !requirements.trim() || !projectName.trim() || (clarificationQuestions.length > 0 && !areClarificationAnswersComplete)}
-                className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-              >
-                {isLoading
-                  ? clarificationQuestions.length > 0
-                    ? 'Submitting Answers...'
-                    : 'Generating Schema...'
-                  : clarificationQuestions.length > 0
-                    ? 'Submit Answers'
-                    : 'Continue to Schema Diagram'}
-              </button>
-            </div>
-          </section>
+            <div className="text-xs text-slate-500">Rendered from the center pane and updated by the chat flow</div>
           </div>
-        )}
 
-        {currentStep === 2 && (
-          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-            <div className="min-h-0 grid grid-cols-1 gap-4 overflow-auto px-6 pt-2 pb-4 xl:grid-cols-[0.9fr,1.45fr] xl:overflow-hidden">
-              <div className="min-h-[50vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
-                <DbmlEditor value={dbmlCode} onChange={setDbmlCode} />
-              </div>
-              <div className="min-h-[70vh] min-w-0 xl:min-h-0 xl:h-full xl:overflow-hidden">
-                <SchemaVisualizer schema={parsedSchema} />
-              </div>
-            </div>
-
-            <div className="border-t border-slate-700 bg-slate-800">
-              {error && <p className="mx-6 mt-3 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
-
-              <div className="flex items-center justify-between px-6 py-3">
-                <button
-                  onClick={() => setCurrentStep(1)}
-                  disabled={isBusy}
-                  className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Back
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsDiffModalOpen(true)}
-                    disabled={isBusy || !selectedProjectId || !dbmlCode.trim() || !hasDbmlChanged}
-                    className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-                    title={hasDbmlChanged ? 'Compare changes' : 'Edit DBML to enable comparison'}
-                  >
-                    Compare Changes
-                  </button>
-                  <button
-                    onClick={handleContinueFromSchema}
-                    disabled={isBusy || !dbmlCode.trim()}
-                    className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-                  >
-                    {isDbmlUpdating ? 'Saving Schema...' : 'Continue to Scaffold Code'}
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="min-h-0 flex-1 overflow-hidden p-4">
+            <SchemaVisualizer schema={parsedSchema} />
           </div>
-        )}
+        </section>
 
-        {currentStep === 3 && (
-          <div className="px-6 pb-6 overflow-auto h-full">
-          <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
-            <h2 className="text-xl font-semibold">Scaffold Code</h2>
-            <p className="mt-1 text-sm text-slate-400">Choose frameworks and scaffold project structure from the schema.</p>
-
-            <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Backend Framework</h3>
-                <div className="space-y-3">
-                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4">
-                    <div>
-                      <p className="font-semibold text-emerald-300">Java Spring Boot</p>
-                      <p className="text-xs text-slate-300">Supported</p>
-                    </div>
-                    <input
-                      type="radio"
-                      name="backend-framework"
-                      checked={selectedBackendFramework === 'spring-boot'}
-                      onChange={() => setSelectedBackendFramework('spring-boot')}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 p-4 opacity-70">
-                    <div>
-                      <p className="font-semibold text-slate-300">Node.js + Express</p>
-                      <p className="text-xs text-amber-300">In development</p>
-                    </div>
-                    <input type="radio" name="backend-framework" disabled />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 p-4 opacity-70">
-                    <div>
-                      <p className="font-semibold text-slate-300">ASP.NET Core</p>
-                      <p className="text-xs text-amber-300">In development</p>
-                    </div>
-                    <input type="radio" name="backend-framework" disabled />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Frontend Framework</h3>
-                <div className="space-y-3">
-                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4">
-                    <div>
-                      <p className="font-semibold text-cyan-300">No Frontend</p>
-                      <p className="text-xs text-slate-300">Current default</p>
-                    </div>
-                    <input
-                      type="radio"
-                      name="frontend-framework"
-                      checked={selectedFrontendFramework === 'none'}
-                      onChange={() => setSelectedFrontendFramework('none')}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 p-4 opacity-70">
-                    <div>
-                      <p className="font-semibold text-slate-300">React</p>
-                      <p className="text-xs text-amber-300">In development</p>
-                    </div>
-                    <input type="radio" name="frontend-framework" disabled />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 p-4 opacity-70">
-                    <div>
-                      <p className="font-semibold text-slate-300">Vue</p>
-                      <p className="text-xs text-amber-300">In development</p>
-                    </div>
-                    <input type="radio" name="frontend-framework" disabled />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {error && <p className="mt-4 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
-
-            <div className="mt-6 flex items-center justify-between">
-              <button
-                onClick={() => setCurrentStep(2)}
-                disabled={isBusy}
-                className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleScaffoldCode}
-                disabled={isBusy || selectedBackendFramework !== 'spring-boot' || !dbmlCode.trim()}
-                className="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-              >
-                {isCodeLoading ? 'Scaffolding Code...' : 'Scaffold and Continue'}
-              </button>
-            </div>
-          </section>
-          </div>
-        )}
-
-        {currentStep === 4 && (
-          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-            <div className="overflow-auto px-6 pt-2 pb-4">
-              <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
-                <h2 className="text-xl font-semibold">Generated Code</h2>
-                <p className="mt-1 text-sm text-slate-400">Visualize generated files or download your code package.</p>
-                {projectName && <p className="mt-2 text-xs text-slate-500">Project: {projectName}</p>}
-
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <button
-                    onClick={() => setIsCodeModalOpen(true)}
-                    disabled={generatedCode.length === 0}
-                    className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-4 text-left transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <p className="font-semibold text-cyan-300">Visualize Code</p>
-                    <p className="mt-1 text-xs text-slate-300">Open code viewer for generated files.</p>
-                  </button>
-
-                  <button
-                    onClick={handleDownloadCode}
-                    disabled={!selectedProjectId || isDownloading}
-                    className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-left transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <p className="font-semibold text-emerald-300">Download Code</p>
-                    <p className="mt-1 text-xs text-slate-300">Download ZIP package of generated backend.</p>
-                  </button>
-                </div>
-
-                <div className="mt-5 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-                  <p className="text-sm font-semibold text-slate-200">Generated Files ({generatedCode.length})</p>
-                  {generatedCode.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-400">No files generated yet.</p>
-                  ) : (
-                    <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 text-sm text-slate-300">
-                      {generatedCode.map((file) => (
-                        <li key={file.fileName}>{file.fileName}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {error && <p className="mt-4 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
-              </section>
-            </div>
-
-            <div className="border-t border-slate-700 bg-slate-800">
-              <div className="flex items-center justify-between px-6 py-3">
-                <button
-                  onClick={() => setCurrentStep(3)}
-                  disabled={isBusy}
-                  className="rounded-md border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Back
-                </button>
-              </div>
-            </div>
-          </div>
+        {isEditorCollapsed ? (
+          <aside className="flex h-full w-14 flex-col border-l border-slate-800 bg-slate-950/90">
+            <button
+              type="button"
+              onClick={() => setIsEditorCollapsed(false)}
+              className="flex h-full items-center justify-center border-b border-slate-800 bg-slate-900/80 text-xs font-semibold uppercase tracking-[0.35em] text-emerald-300 transition hover:bg-slate-800"
+              aria-label="Expand DBML editor panel"
+            >
+              <span className="-rotate-90 whitespace-nowrap">DBML</span>
+            </button>
+          </aside>
+        ) : (
+          <aside className="flex h-full w-[24rem] max-w-[32vw] min-w-[20rem] flex-col border-l border-slate-800 bg-slate-950/95 shadow-[0_0_50px_rgba(8,15,31,0.45)]">
+            <DbmlEditor
+              value={dbmlCode}
+              onChange={setDbmlCode}
+              onSave={handleSaveDbml}
+              onCompare={() => setIsDiffModalOpen(true)}
+              onToggleCollapse={() => setIsEditorCollapsed(true)}
+              isSaving={isDbmlUpdating}
+              isComparing={false}
+              canSave={Boolean(selectedProjectId) && hasDbmlChanged}
+              canCompare={Boolean(selectedProjectId) && hasDbmlChanged}
+            />
+          </aside>
         )}
       </main>
     </div>

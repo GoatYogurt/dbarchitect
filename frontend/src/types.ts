@@ -28,6 +28,14 @@ export interface GeneratedFile {
   content: string;
 }
 
+export type ChatRole = 'user' | 'assistant' | 'system';
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+}
+
 export type ClarificationQuestionType = 'multi_choice' | 'single_choice' | 'text';
 
 export interface ClarificationQuestion {

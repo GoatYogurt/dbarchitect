@@ -5,7 +5,6 @@ from pydbml import PyDBML
 from pydbml.exceptions import ValidationError
 
 
-
 def validate_dbml(dbml_code: str):
     try:
         clean_code = dbml_code.replace("```dbml", "").replace("```", "").strip()

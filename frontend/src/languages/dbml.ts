@@ -30,7 +30,8 @@ export const registerDBMLLanguage = (monaco: Monaco) => {
       'increment',
       'ref',
       'database_type',
-      'note'
+      'note',
+      'default'
     ],
 
     // Data types in DBML

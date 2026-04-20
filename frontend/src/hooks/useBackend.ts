@@ -109,6 +109,10 @@ export function useBackend() {
     }
   }, []);
 
+  const chatWithAgent = useCallback(async (requirements: string, projectName: string, answers: ClarificationAnswer[] = []): Promise<GenerateDbmlResponse | null> => {
+    return generateDbml(requirements, projectName, answers);
+  }, [generateDbml]);
+
   const generateSpringBootCode = useCallback(async (dbmlCode: string): Promise<GeneratedFile[] | null> => {
     if (!dbmlCode.trim()) {
       setError('DBML code cannot be empty.');
@@ -316,5 +320,5 @@ export function useBackend() {
     }
   }, []);
 
-  return { generateDbml, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode };
+  return { generateDbml, chatWithAgent, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode };
 }

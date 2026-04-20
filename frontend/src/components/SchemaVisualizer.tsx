@@ -7,7 +7,6 @@ import ReactFlow, {
   Controls,
   Background,
   BackgroundVariant,
-  MarkerType,
   MiniMap,
   useNodesState,
   useEdgesState,
@@ -453,7 +452,7 @@ export function SchemaVisualizer({ schema }: SchemaVisualizerProps) {
     <div className="h-full bg-slate-800 rounded-lg shadow-inner flex flex-col border border-slate-700">
       <div className="flex items-center gap-2 p-3 bg-slate-900/50 border-b border-slate-700 flex-shrink-0">
         <DatabaseIcon className="w-5 h-5 text-violet-400" />
-        <h2 className="font-semibold text-slate-200">3. Visualize Schema</h2>
+        <h2 className="font-semibold text-slate-200">Schema Canvas</h2>
         <ModeToggle>
           <ModeButton 
             active={viewMode === 'table'} 
