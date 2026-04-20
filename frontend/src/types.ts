@@ -28,9 +28,23 @@ export interface GeneratedFile {
   content: string;
 }
 
+export type ClarificationQuestionType = 'multi_choice' | 'single_choice' | 'text';
+
+export interface ClarificationQuestion {
+  question_text: string;
+  type: ClarificationQuestionType;
+  options: string[] | null;
+}
+
+export interface ClarificationAnswer {
+  question_text: string;
+  answer: string | string[];
+}
+
 export interface GenerateDbmlResponse {
+  isClear: boolean;
+  questions: ClarificationQuestion[];
   cleanDbmlCode: string;
-  projectId: number;
 }
 
 export interface Project {

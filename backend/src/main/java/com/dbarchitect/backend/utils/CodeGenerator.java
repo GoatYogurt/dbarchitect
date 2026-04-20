@@ -6,6 +6,7 @@ import com.wn.dbml.compiler.DbmlParser;
 import com.wn.dbml.model.*;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -21,7 +22,10 @@ import org.springframework.ui.freemarker.FreeMarkerTemplateUtils;
 
 @Service
 public class CodeGenerator {
+    @Autowired
     private final Configuration freemarkerConfig;
+
+    @Autowired
     private final DesignProjectRepository designProjectRepository;
 
     public CodeGenerator(Configuration freemarkerConfig, DesignProjectRepository designProjectRepository) {
@@ -235,6 +239,7 @@ public class CodeGenerator {
     private record GeneratedFile(String path, String content) {}
 
     private List<GeneratedFile> generateAllSourceFiles(String dbmlContent) throws Exception {
+        System.out.println(dbmlContent);
         Database db = DbmlParser.parse(dbmlContent);
         List<GeneratedFile> files = new ArrayList<>();
         Schema schema = db.getSchema("public");

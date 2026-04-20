@@ -1,4 +1,4 @@
-package com.dbarchitect.backend.utils;
+package com.dbarchitect.backend.configs;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

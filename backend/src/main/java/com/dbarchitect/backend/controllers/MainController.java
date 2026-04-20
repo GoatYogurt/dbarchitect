@@ -7,6 +7,7 @@ import com.dbarchitect.backend.requests.GenerateDBMLRequest;
 import com.dbarchitect.backend.requests.UpdateDbmlRequest;
 import com.dbarchitect.backend.requests.GenerateCodeRequest;
 import com.dbarchitect.backend.responses.DesignProjectResponse;
+import com.dbarchitect.backend.responses.FileDiff;
 import com.dbarchitect.backend.services.MainService;
 import com.dbarchitect.backend.utils.DBMLCode;
 import org.springframework.http.HttpHeaders;
@@ -102,9 +103,9 @@ public class MainController {
     }
 
     @PostMapping("/compare")
-    public ResponseEntity<List<CodeChange>> getDiff(@RequestBody CompareRequest req) throws Exception {
+    public ResponseEntity<List<FileDiff>> getDiff(@RequestBody CompareRequest req) throws Exception {
         // req chứa oldCode và newCode
-        List<CodeChange> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
+        List<FileDiff> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
         return ResponseEntity.ok(diffResults);
     }
 

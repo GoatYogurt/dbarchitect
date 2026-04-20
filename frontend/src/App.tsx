@@ -3,7 +3,7 @@ import { DbmlEditor } from './components/DbmlEditor';
 import { SchemaVisualizer } from './components/SchemaVisualizer';
 import { useBackend } from './hooks/useBackend';
 import { parseDBML } from './services/dbmlParser';
-import { ParsedSchema, GeneratedFile, Project } from './types';
+import { ParsedSchema, GeneratedFile, Project, ClarificationAnswer, ClarificationQuestion } from './types';
 import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
@@ -11,19 +11,6 @@ import { ProjectSelectModal } from './components/ProjectSelectModal';
 import { CodeDiffModal } from './components/CodeDiffModal';
 
 type WizardStep = 1 | 2 | 3 | 4;
-
-function buildProjectName(requirements: string): string {
-  const words = requirements
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 4)
-    .join('-')
-    .toLowerCase();
-
-  const suffix = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  return words ? `${words}-${suffix}` : `db-project-${suffix}`;
-}
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
@@ -42,6 +29,9 @@ export default function App() {
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [clarificationQuestions, setClarificationQuestions] = useState<ClarificationQuestion[]>([]);
+  const [clarificationAnswers, setClarificationAnswers] = useState<Record<number, string | string[]>>({});
+  const [clarificationError, setClarificationError] = useState<string | null>(null);
 
   const [selectedBackendFramework, setSelectedBackendFramework] = useState<string>('spring-boot');
   const [selectedFrontendFramework, setSelectedFrontendFramework] = useState<string>('none');
@@ -74,22 +64,125 @@ export default function App() {
     []
   );
 
+  const areClarificationAnswersComplete = useMemo(() => {
+    if (clarificationQuestions.length === 0) {
+      return true;
+    }
+
+    return clarificationQuestions.every((question, index) => {
+      const answer = clarificationAnswers[index];
+      if (question.type === 'text') {
+        return typeof answer === 'string' && answer.trim().length > 0;
+      }
+      if (question.type === 'single_choice') {
+        return typeof answer === 'string' && answer.trim().length > 0;
+      }
+
+      return Array.isArray(answer) && answer.length > 0;
+    });
+  }, [clarificationAnswers, clarificationQuestions]);
+
+  const resetClarificationFlow = useCallback(() => {
+    setClarificationQuestions([]);
+    setClarificationAnswers({});
+    setClarificationError(null);
+  }, []);
+
+  const updateSingleChoiceAnswer = useCallback((index: number, value: string) => {
+    setClarificationAnswers((prev) => ({ ...prev, [index]: value }));
+    setClarificationError(null);
+  }, []);
+
+  const updateTextAnswer = useCallback((index: number, value: string) => {
+    setClarificationAnswers((prev) => ({ ...prev, [index]: value }));
+    setClarificationError(null);
+  }, []);
+
+  const updateMultiChoiceAnswer = useCallback((index: number, option: string, checked: boolean) => {
+    setClarificationAnswers((prev) => {
+      const current = Array.isArray(prev[index]) ? (prev[index] as string[]) : [];
+      const updated = checked
+        ? Array.from(new Set([...current, option]))
+        : current.filter((item) => item !== option);
+
+      return { ...prev, [index]: updated };
+    });
+    setClarificationError(null);
+  }, []);
+
+  const buildClarificationPayload = useCallback((): ClarificationAnswer[] | null => {
+    const payload: ClarificationAnswer[] = [];
+
+    for (let index = 0; index < clarificationQuestions.length; index += 1) {
+      const question = clarificationQuestions[index];
+      const answer = clarificationAnswers[index];
+
+      if (question.type === 'text') {
+        if (typeof answer !== 'string' || !answer.trim()) {
+          setClarificationError(`Please answer question ${index + 1}.`);
+          return null;
+        }
+        payload.push({ question_text: question.question_text, answer: answer.trim() });
+        continue;
+      }
+
+      if (question.type === 'single_choice') {
+        if (typeof answer !== 'string' || !answer.trim()) {
+          setClarificationError(`Please choose one option for question ${index + 1}.`);
+          return null;
+        }
+        payload.push({ question_text: question.question_text, answer });
+        continue;
+      }
+
+      if (!Array.isArray(answer) || answer.length === 0) {
+        setClarificationError(`Please choose at least one option for question ${index + 1}.`);
+        return null;
+      }
+      payload.push({ question_text: question.question_text, answer });
+    }
+
+    return payload;
+  }, [clarificationAnswers, clarificationQuestions]);
+
   const handleGenerateSchema = useCallback(async () => {
     if (!requirements.trim() || !projectName.trim()) {
       return;
     }
 
-    const response = await generateDbml(requirements, projectName);
+    setClarificationError(null);
+
+    let answers: ClarificationAnswer[] = [];
+    if (clarificationQuestions.length > 0) {
+      const payload = buildClarificationPayload();
+      if (!payload) {
+        return;
+      }
+      answers = payload;
+    }
+
+    const response = await generateDbml(requirements, projectName, answers);
     if (!response) {
       return;
     }
 
+    if (!response.isClear) {
+      setClarificationQuestions(response.questions);
+      setClarificationAnswers({});
+      setDbmlCode('');
+      setOriginalDbmlCode('');
+      setGeneratedCode([]);
+      setSelectedProjectId(null);
+      return;
+    }
+
+    resetClarificationFlow();
     setDbmlCode(response.cleanDbmlCode);
     setOriginalDbmlCode(response.cleanDbmlCode);
-    setSelectedProjectId(response.projectId);
+    setSelectedProjectId(null);
     setGeneratedCode([]);
     setCurrentStep(2);
-  }, [requirements, projectName, generateDbml]);
+  }, [requirements, projectName, clarificationQuestions.length, buildClarificationPayload, generateDbml, resetClarificationFlow]);
 
   const handleContinueFromSchema = useCallback(async () => {
     if (!dbmlCode.trim()) {
@@ -151,6 +244,7 @@ export default function App() {
   }, [fetchProjects]);
 
   const handleSelectProject = useCallback((project: Project) => {
+    resetClarificationFlow();
     setProjectName(project.projectName);
     setDbmlCode(project.cleanDbmlCode);
     setOriginalDbmlCode(project.cleanDbmlCode);
@@ -158,9 +252,10 @@ export default function App() {
     setRequirements('');
     setGeneratedCode([]);
     setCurrentStep(2);
-  }, []);
+  }, [resetClarificationFlow]);
 
   const handleCreateNewProject = useCallback(() => {
+    resetClarificationFlow();
     setProjectName('');
     setRequirements('');
     setDbmlCode('');
@@ -168,15 +263,16 @@ export default function App() {
     setSelectedProjectId(null);
     setGeneratedCode([]);
     setCurrentStep(1);
-  }, []);
+  }, [resetClarificationFlow]);
 
   const handleTabFillExamples = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Tab') {
       e.preventDefault();
+      resetClarificationFlow();
       setProjectName('Course Management System');
       setRequirements('Build a course management system with users, courses, enrollments, and payments.');
     }
-  }, []);
+  }, [resetClarificationFlow]);
 
   useEffect(() => {
     try {
@@ -275,7 +371,7 @@ export default function App() {
           <section className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
             <h2 className="text-xl font-semibold">Input Requirements</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Enter a project name and describe your system requirements. We will generate DBML and move you to the schema step.
+              Enter a project name and describe your system requirements. If the request is unclear, answer the follow-up questions and submit again.
             </p>
 
             <div className="mt-4 space-y-4">
@@ -301,23 +397,95 @@ export default function App() {
                 <textarea
                   id="requirements"
                   value={requirements}
-                  onChange={(e) => setRequirements(e.target.value)}
+                  onChange={(e) => {
+                    resetClarificationFlow();
+                    setRequirements(e.target.value);
+                  }}
                   onKeyDown={handleTabFillExamples}
                   placeholder="Example: Build a course management system with users, courses, enrollments, and payments."
                   className="h-48 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
                 />
               </div>
+
+              {clarificationQuestions.length > 0 && (
+                <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-cyan-300">Clarification Questions</h3>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Please answer all questions below, then submit again.
+                  </p>
+
+                  <div className="mt-4 space-y-4">
+                    {clarificationQuestions.map((question, index) => (
+                      <div key={`${question.question_text}-${index}`} className="rounded-md border border-slate-700 bg-slate-900/50 p-3">
+                        <p className="text-sm font-medium text-slate-100">{index + 1}. {question.question_text}</p>
+
+                        {question.type === 'multi_choice' && (
+                          <div className="mt-3 space-y-2">
+                            {(question.options || []).map((option) => {
+                              const current = Array.isArray(clarificationAnswers[index]) ? (clarificationAnswers[index] as string[]) : [];
+                              const checked = current.includes(option);
+
+                              return (
+                                <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => updateMultiChoiceAnswer(index, option, e.target.checked)}
+                                  />
+                                  {option}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {question.type === 'single_choice' && (
+                          <div className="mt-3 space-y-2">
+                            {(question.options || []).map((option) => (
+                              <label key={option} className="flex items-center gap-2 text-sm text-slate-300">
+                                <input
+                                  type="radio"
+                                  name={`single-choice-question-${index}`}
+                                  checked={clarificationAnswers[index] === option}
+                                  onChange={() => updateSingleChoiceAnswer(index, option)}
+                                />
+                                {option}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {question.type === 'text' && (
+                          <textarea
+                            value={typeof clarificationAnswers[index] === 'string' ? clarificationAnswers[index] as string : ''}
+                            onChange={(e) => updateTextAnswer(index, e.target.value)}
+                            placeholder="Type your answer"
+                            className="mt-3 h-24 w-full rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-200 placeholder-slate-500 outline-none transition focus:border-cyan-500"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && <p className="mt-3 rounded-md border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">{error}</p>}
+            {clarificationError && <p className="mt-3 rounded-md border border-amber-800 bg-amber-900/30 px-3 py-2 text-sm text-amber-200">{clarificationError}</p>}
 
             <div className="mt-5 flex justify-end">
               <button
                 onClick={handleGenerateSchema}
-                disabled={isBusy || !requirements.trim() || !projectName.trim()}
+                disabled={isBusy || !requirements.trim() || !projectName.trim() || (clarificationQuestions.length > 0 && !areClarificationAnswersComplete)}
                 className="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-600"
               >
-                {isLoading ? 'Generating Schema...' : 'Continue to Schema Diagram'}
+                {isLoading
+                  ? clarificationQuestions.length > 0
+                    ? 'Submitting Answers...'
+                    : 'Generating Schema...'
+                  : clarificationQuestions.length > 0
+                    ? 'Submit Answers'
+                    : 'Continue to Schema Diagram'}
               </button>
             </div>
           </section>
@@ -482,7 +650,7 @@ export default function App() {
 
                   <button
                     onClick={handleDownloadCode}
-                    disabled={!selectedProjectId || generatedCode.length === 0 || isDownloading}
+                    disabled={!selectedProjectId || isDownloading}
                     className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-left transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <p className="font-semibold text-emerald-300">Download Code</p>

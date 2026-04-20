@@ -1,22 +1,55 @@
 
 import { useState, useCallback } from 'react';
-import { GeneratedFile, GenerateDbmlResponse, Project, FileNode, CodeChange } from '../types';
-import { GEMINI_MODEL } from '../constants';
+import { ClarificationAnswer, ClarificationQuestion, GeneratedFile, GenerateDbmlResponse, Project, FileNode, CodeChange } from '../types';
 
-const BASE_URL = 'http://localhost:8080';
+const JAVA_BACKEND_URL = 'http://localhost:8080';
+const PYTHON_BACKEND_URL = 'http://localhost:8000';
 // const BASE_URL = "https://x7nbr74s-8080.asse.devtunnels.ms"
+
+interface PythonChatResponse {
+  status?: string;
+  data?: {
+    is_clear?: boolean;
+    questions?: ClarificationQuestion[] | null;
+    dbml_code?: unknown;
+  };
+}
+
+function normalizeDbmlCode(rawDbml: string): string {
+  return rawDbml
+    .replace(/^```dbml\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+}
+
+function extractDbmlCode(dbmlPayload: unknown): string {
+  if (typeof dbmlPayload === 'string') {
+    return normalizeDbmlCode(dbmlPayload);
+  }
+
+  if (dbmlPayload && typeof dbmlPayload === 'object') {
+    const content = (dbmlPayload as { content?: unknown }).content;
+    if (typeof content === 'string') {
+      return normalizeDbmlCode(content);
+    }
+  }
+
+  return '';
+}
+
 export function useBackend() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCodeLoading, setIsCodeLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isDbmlUpdating, setIsDbmlUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastProjectId, setLastProjectId] = useState<number | null>(() => {
+  const [lastProjectId] = useState<number | null>(() => {
     const stored = localStorage.getItem('projectId');
     return stored ? Number(stored) : null;
   });
 
-  const generateDbml = useCallback(async (requirements: string, projectName: string): Promise<GenerateDbmlResponse | null> => {
+  const generateDbml = useCallback(async (requirements: string, projectName: string, answers: ClarificationAnswer[] = []): Promise<GenerateDbmlResponse | null> => {
     if (!requirements.trim()) {
       setError('Requirements cannot be empty.');
       return null;
@@ -30,13 +63,12 @@ export function useBackend() {
     setError(null);
 
     try {
-      const response = await fetch(`${BASE_URL}/generate-dbml`, {
+      const response = await fetch(`${PYTHON_BACKEND_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectName,
-          systemDescription: requirements,
-          modelName: GEMINI_MODEL,
+          user_input: requirements,
+          answers,
         }),
       });
 
@@ -45,23 +77,29 @@ export function useBackend() {
         throw new Error(errorText || `Backend error: ${response.status}`);
       }
 
-      const json: GenerateDbmlResponse = await response.json();
-      const dbml = (json.cleanDbmlCode || '').trim();
+      const json: PythonChatResponse = await response.json();
+      const isClear = Boolean(json.data?.is_clear);
+      const questions = Array.isArray(json.data?.questions) ? json.data!.questions : [];
+
+      if (!isClear) {
+        return {
+          isClear: false,
+          questions,
+          cleanDbmlCode: '',
+        };
+      }
+
+      const dbml = extractDbmlCode(json.data?.dbml_code);
 
       if (!dbml) {
         throw new Error('Empty DBML returned from backend.');
       }
 
-      if (typeof json.projectId === 'number') {
-        try {
-          localStorage.setItem('projectId', String(json.projectId));
-          setLastProjectId(json.projectId);
-        } catch (_) {
-          // ignore localStorage errors
-        }
-      }
-
-      return json;
+      return {
+        isClear: true,
+        questions: [],
+        cleanDbmlCode: dbml,
+      };
     } catch (e: any) {
       console.error('Backend DBML Generation Error:', e);
       setError(e.message || 'An unknown error occurred while communicating with the backend.');
@@ -81,7 +119,7 @@ export function useBackend() {
     setError(null);
 
     try {
-      const response = await fetch(`${BASE_URL}/generate-java-code`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/generate-java-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawDbmlCode: dbmlCode }),
@@ -118,7 +156,7 @@ export function useBackend() {
   const fetchProjects = useCallback(async (): Promise<Project[] | null> => {
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/projects`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/projects`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -140,7 +178,7 @@ export function useBackend() {
   const fetchProjectById = useCallback(async (projectId: number): Promise<Project | null> => {
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/projects/${projectId}`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/projects/${projectId}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -162,7 +200,7 @@ export function useBackend() {
   const downloadGeneratedCode = useCallback(async (projectId: number): Promise<boolean> => {
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/generate-code?id=${projectId}`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/generate-code?id=${projectId}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -201,7 +239,7 @@ export function useBackend() {
     setIsPreviewLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/generate-preview?id=${projectId}`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/generate-preview?id=${projectId}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -227,7 +265,7 @@ export function useBackend() {
     setError(null);
     try {
       const wrappedDbmlCode = `\`\`\`dbml\n${dbmlCode}\n\`\`\``;
-      const response = await fetch(`${BASE_URL}/projects/${projectId}/dbml`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/projects/${projectId}/dbml`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawDbmlCode: wrappedDbmlCode }),
@@ -256,7 +294,7 @@ export function useBackend() {
       const cleanOldCode = oldCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
       const cleanNewCode = newCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
 
-      const response = await fetch(`${BASE_URL}/compare`, {
+      const response = await fetch(`${JAVA_BACKEND_URL}/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ oldCode: cleanOldCode, newCode: cleanNewCode }),
