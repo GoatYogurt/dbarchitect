@@ -3,7 +3,6 @@ from product_manager.agent import ProductManagerAgent
 from architect.agent import ArchitectAgent
 from state import AgentState
 
-# 1. Điều hướng sau khi PM làm việc
 def should_continue_after_pm(state: AgentState):
     decision = state["pm_response"].is_clear
     if decision is True:
