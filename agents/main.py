@@ -20,17 +20,17 @@ def should_continue_after_architect(state: AgentState):
     print("--- VALIDATION SUCCESS OR MAX RETRIES REACHED ---")
     return "end"
 
-# Khởi tạo Agents
+# initialize agents
 pm_agent = ProductManagerAgent()
 architect_agent = ArchitectAgent()
 
 workflow = StateGraph(AgentState)
 
-# Thêm Nodes
+# add nodes for each agent's run method
 workflow.add_node("product_manager", pm_agent.run)
 workflow.add_node("architect", architect_agent.run)
 
-# Thiết lập luồng
+# set the entry point of the workflow
 workflow.set_entry_point("product_manager")
 
 workflow.add_conditional_edges(
@@ -53,6 +53,7 @@ workflow.add_conditional_edges(
 
 app = workflow.compile()
 
+# save image of the graph for visualization
 try:
     graph_image = app.get_graph(xray=True).draw_mermaid_png()
     with open("agent_graph.png", "wb") as f:
