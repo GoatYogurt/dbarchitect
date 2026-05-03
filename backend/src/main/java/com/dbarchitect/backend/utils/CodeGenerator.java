@@ -1,7 +1,7 @@
 package com.dbarchitect.backend.utils;
 
-import com.dbarchitect.backend.entities.DesignProject;
-import com.dbarchitect.backend.repositories.DesignProjectRepository;
+import com.dbarchitect.backend.entities.Project;
+import com.dbarchitect.backend.repositories.ProjectRepository;
 import com.wn.dbml.compiler.DbmlParser;
 import com.wn.dbml.model.*;
 import freemarker.template.Configuration;
@@ -26,11 +26,11 @@ public class CodeGenerator {
     private final Configuration freemarkerConfig;
 
     @Autowired
-    private final DesignProjectRepository designProjectRepository;
+    private final ProjectRepository projectRepository;
 
-    public CodeGenerator(Configuration freemarkerConfig, DesignProjectRepository designProjectRepository) {
+    public CodeGenerator(Configuration freemarkerConfig, ProjectRepository projectRepository) {
         this.freemarkerConfig = freemarkerConfig;
-        this.designProjectRepository = designProjectRepository;
+        this.projectRepository = projectRepository;
     }
 
 //    public Map<String, String> generateAllEntities(String dbmlContent) throws Exception {
@@ -173,7 +173,7 @@ public class CodeGenerator {
     }
 
 //    public byte[] generateProjectZip(Long projectId) throws Exception {
-//        DesignProject project = designProjectRepository.findById(projectId).isPresent() ?
+//        Project project = designProjectRepository.findById(projectId).isPresent() ?
 //                designProjectRepository.findById(projectId).get() : null;
 //        if (project == null) {
 //            throw new IllegalArgumentException("Project với ID " + projectId + " không tồn tại.");
@@ -195,7 +195,7 @@ public class CodeGenerator {
 //    }
 
     public byte[] generateProjectZip(Long projectId) throws Exception {
-        DesignProject project = designProjectRepository.findById(projectId)
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project ID " + projectId + " không tồn tại."));
         List<GeneratedFile> generatedFiles = generateAllSourceFiles(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
 

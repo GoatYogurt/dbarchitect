@@ -1,9 +1,9 @@
 package com.dbarchitect.backend.repositories;
 
-import com.dbarchitect.backend.entities.DesignProject;
+import com.dbarchitect.backend.entities.Project;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface DesignProjectRepository extends JpaRepository<DesignProject, Long> {
+public interface ProjectRepository extends JpaRepository<Project, Long> {
 }

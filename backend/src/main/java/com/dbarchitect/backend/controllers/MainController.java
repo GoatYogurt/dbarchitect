@@ -1,12 +1,11 @@
 package com.dbarchitect.backend.controllers;
 
-import com.dbarchitect.backend.entities.CodeChange;
 import com.dbarchitect.backend.entities.FileNode;
 import com.dbarchitect.backend.requests.CompareRequest;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
 import com.dbarchitect.backend.requests.UpdateDbmlRequest;
 import com.dbarchitect.backend.requests.GenerateCodeRequest;
-import com.dbarchitect.backend.responses.DesignProjectResponse;
+import com.dbarchitect.backend.responses.ProjectResponse;
 import com.dbarchitect.backend.responses.FileDiff;
 import com.dbarchitect.backend.services.MainService;
 import com.dbarchitect.backend.utils.DBMLCode;
@@ -15,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 import java.util.Map;
@@ -31,21 +29,8 @@ public class MainController {
     }
 
     @PostMapping("/generate-dbml")
-    public DesignProjectResponse generateDbml(@RequestBody GenerateDBMLRequest request) {
+    public ProjectResponse generateDbml(@RequestBody GenerateDBMLRequest request) {
         return mainService.generateDbml(request);
-    }
-
-    @PutMapping("/projects/{id}/dbml")
-    public ResponseEntity<DesignProjectResponse> updateProjectDbml(@PathVariable Long id, @RequestBody UpdateDbmlRequest request) {
-        var updated = mainService.updateProjectDbml(id, request.getRawDbmlCode());
-        if (updated == null) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        DesignProjectResponse response = new DesignProjectResponse();
-        response.setProjectId(updated.getId());
-        response.setProjectName(updated.getName());
-        response.setCleanDbmlCode(DBMLCode.extractCleanDbmlCode(updated.getRawDbmlCode()));
-        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     // endpoint to download generated code as ZIP file
@@ -71,35 +56,6 @@ public class MainController {
     public FileNode generatePreview(@RequestParam Long id) {
         // Generate preview for the project identified by ID (reads project from DB and builds tree)
         return mainService.generateProjectPreview(id);
-    }
-
-    @GetMapping("/projects/{id}")
-    public DesignProjectResponse getProjectById(@PathVariable Long id) {
-        var project = mainService.getDesignProjectById(id);
-        if (project == null) {
-            return null;
-        }
-        DesignProjectResponse response = new DesignProjectResponse();
-        response.setProjectId(project.getId());
-        response.setProjectName(project.getName());
-        response.setCleanDbmlCode(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
-        System.out.println(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
-        System.out.println(project.getRawDbmlCode());
-        return response;
-    }
-
-    @GetMapping("/projects")
-    public java.util.List<DesignProjectResponse> getAllProjects() {
-        var projects = mainService.getAllDesignProjects();
-        java.util.List<DesignProjectResponse> responses = new java.util.ArrayList<>();
-        for (var project : projects) {
-            DesignProjectResponse response = new DesignProjectResponse();
-            response.setProjectId(project.getId());
-            response.setProjectName(project.getName());
-            response.setCleanDbmlCode(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
-            responses.add(response);
-        }
-        return responses;
     }
 
     @PostMapping("/compare")

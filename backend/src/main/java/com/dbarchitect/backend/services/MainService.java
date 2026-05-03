@@ -1,11 +1,11 @@
 package com.dbarchitect.backend.services;
 
 import com.dbarchitect.backend.entities.CodeChange;
-import com.dbarchitect.backend.entities.DesignProject;
+import com.dbarchitect.backend.entities.Project;
 import com.dbarchitect.backend.entities.FileNode;
-import com.dbarchitect.backend.repositories.DesignProjectRepository;
+import com.dbarchitect.backend.repositories.ProjectRepository;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
-import com.dbarchitect.backend.responses.DesignProjectResponse;
+import com.dbarchitect.backend.responses.ProjectResponse;
 import com.dbarchitect.backend.utils.CodeGenerator;
 import com.dbarchitect.backend.utils.DBMLCode;
 import com.dbarchitect.backend.utils.ProjectTreeBuilder;
@@ -27,26 +27,26 @@ import java.util.Collections;
 public class MainService {
     private final DBMLGenerator dbmlGenerator;
     private final CodeGenerator codeGenerator;
-    private final DesignProjectRepository designProjectRepository;
+    private final ProjectRepository projectRepository;
 
-    public MainService(CodeGenerator codeGenerator, DesignProjectRepository designProjectRepository) {
+    public MainService(CodeGenerator codeGenerator, ProjectRepository projectRepository) {
         this.codeGenerator = codeGenerator;
         this.dbmlGenerator = new DBMLGenerator();
-        this.designProjectRepository = designProjectRepository;
+        this.projectRepository = projectRepository;
     }
 
-    public DesignProjectResponse generateDbml(GenerateDBMLRequest request) {
+    public ProjectResponse generateDbml(GenerateDBMLRequest request) {
         DBMLCode dbmlCode = dbmlGenerator.generateDbmlCode(request.getSystemDescription(), request.getModelName());
 
-        DesignProject designProject = new DesignProject();
-        designProject.setName(request.getProjectName());
-        designProject.setRawDbmlCode(dbmlCode.getRawDbmlCode());
-        designProjectRepository.save(designProject);
+        Project project = new Project();
+        project.setName(request.getProjectName());
+        project.setRawDbmlCode(dbmlCode.getRawDbmlCode());
+        projectRepository.save(project);
 
-        DesignProjectResponse response = new DesignProjectResponse();
+        ProjectResponse response = new ProjectResponse();
         response.setCleanDbmlCode(dbmlCode.extractCleanDbmlCode());
-        response.setProjectId(designProject.getId());
-        response.setProjectName(designProject.getName());
+        response.setProjectId(project.getId());
+        response.setProjectName(project.getName());
         return response;
     }
 
@@ -78,7 +78,7 @@ public class MainService {
     public FileNode generateProjectPreview(Long projectId) {
         try {
             // Tải dự án từ DB
-            DesignProject project = designProjectRepository.findById(projectId).orElse(null);
+            Project project = projectRepository.findById(projectId).orElse(null);
             if (project == null) {
                 return null;
             }
@@ -92,22 +92,8 @@ public class MainService {
         }
     }
 
-    public DesignProject getDesignProjectById(Long projectId) {
-        return designProjectRepository.findById(projectId).orElse(null);
-    }
-
-    public DesignProject updateProjectDbml(Long projectId, String rawDbmlCode) {
-        var projectOpt = designProjectRepository.findById(projectId);
-        if (projectOpt.isEmpty()) return null;
-        DesignProject project = projectOpt.get();
-        project.setRawDbmlCode(rawDbmlCode);
-        // Optionally update status or record a change; for now we just save
-        designProjectRepository.save(project);
-        return project;
-    }
-
-    public List<DesignProject> getAllDesignProjects() {
-        return designProjectRepository.findAll();
+    public List<Project> getAllDesignProjects() {
+        return projectRepository.findAll();
     }
 
     // Simple language detection (same rules as ProjectTreeBuilder)
@@ -124,7 +110,7 @@ public class MainService {
     public List<com.dbarchitect.backend.responses.FileDiff> compareCode(Integer projectId, String newDbmlCode) throws Exception {
         List<com.dbarchitect.backend.responses.FileDiff> fileDiffs = new ArrayList<>();
 
-        DesignProject project = designProjectRepository.findById(projectId.longValue()).orElse(null);
+        Project project = projectRepository.findById(projectId.longValue()).orElse(null);
         if (project == null) {
             com.dbarchitect.backend.responses.FileDiff fd = new com.dbarchitect.backend.responses.FileDiff();
             fd.setPath("N/A");
