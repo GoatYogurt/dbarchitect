@@ -50,6 +50,8 @@ class CreateNewProjectSOP:
                 json=payload,
                 timeout=30
             )
+
+            print(f"Response: {response.json()}")
             
             if response.status_code == 200:
                 data = response.json()

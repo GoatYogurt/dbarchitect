@@ -20,6 +20,7 @@ public class ProjectController {
 
     @PostMapping("")
     public ResponseEntity<ProjectResponse> create(@RequestBody CreateProjectRequest createProjectRequest) {
+        System.out.println("creating new project");
         return projectService.createProject(createProjectRequest.getProjectName(), createProjectRequest.getRawDbmlCode());
     }
 

@@ -63,10 +63,11 @@ export function useBackend() {
     setError(null);
 
     try {
-      const response = await fetch(`${PYTHON_BACKEND_URL}/chat`, {
+      const response = await fetch(`${PYTHON_BACKEND_URL}/create-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          project_name: projectName,
           user_input: requirements,
           answers,
         }),
@@ -112,21 +113,6 @@ export function useBackend() {
   const chatWithAgent = useCallback(async (requirements: string, projectName: string, answers: ClarificationAnswer[] = []): Promise<GenerateDbmlResponse | null> => {
     return generateDbml(requirements, projectName, answers);
   }, [generateDbml]);
-
-  const createNewProject = useCallback(async (userInput: string, projectName: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${PYTHON_BACKEND_URL}/create-project`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_input: userInput, project_name: projectName }),
-      });
-      const data = await response.json();
-      return data;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
 
   const generateSpringBootCode = useCallback(async (dbmlCode: string): Promise<GeneratedFile[] | null> => {
     if (!dbmlCode.trim()) {
