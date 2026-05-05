@@ -101,8 +101,7 @@ class CreateNewProjectSOP:
             self.should_continue_after_architect,
             {
                 "retry": "architect",
-                "save_project": "save_project",
-                "end": END
+                "save_project": "save_project"
             }
         )
         
@@ -115,4 +114,14 @@ class CreateNewProjectSOP:
 def create_project_workflow():
     """Factory function to create and return the compiled workflow"""
     sop = CreateNewProjectSOP()
+
+    # save image of the graph for visualization
+    try:
+        graph_image = sop.build_workflow().get_graph(xray=True).draw_mermaid_png()
+        with open("create_new_project_sop.png", "wb") as f:
+            f.write(graph_image)
+        print("Graph image saved as create_new_project_sop.png")
+    except Exception as e:
+        print(f"Could not generate graph image: {e}")
+
     return sop.build_workflow()
