@@ -3,7 +3,6 @@ package com.dbarchitect.backend.controllers;
 import com.dbarchitect.backend.entities.FileNode;
 import com.dbarchitect.backend.requests.CompareRequest;
 import com.dbarchitect.backend.requests.GenerateDBMLRequest;
-import com.dbarchitect.backend.requests.UpdateDbmlRequest;
 import com.dbarchitect.backend.requests.GenerateCodeRequest;
 import com.dbarchitect.backend.responses.ProjectResponse;
 import com.dbarchitect.backend.responses.FileDiff;
@@ -51,13 +50,14 @@ public class MainController {
         }
     }
 
-    // endppint to generate preview of project structure as a file tree based on the DBML code of a project
+    // endpoint to generate preview of project structure as a file tree based on the DBML code of a project
     @GetMapping("/generate-preview")
     public FileNode generatePreview(@RequestParam Long id) {
         // Generate preview for the project identified by ID (reads project from DB and builds tree)
         return mainService.generateProjectPreview(id);
     }
 
+    // unused
     @PostMapping("/compare")
     public ResponseEntity<List<FileDiff>> getDiff(@RequestBody CompareRequest req) throws Exception {
         // req chứa oldCode và newCode
