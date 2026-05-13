@@ -6,6 +6,7 @@ import com.wn.dbml.compiler.DbmlParser;
 import com.wn.dbml.model.*;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -33,32 +34,7 @@ public class CodeGenerator {
         this.projectRepository = projectRepository;
     }
 
-//    public Map<String, String> generateAllEntities(String dbmlContent) throws Exception {
-//        // 1. Parse DBML
-//        System.out.println(dbmlContent);
-//        Database db = DbmlParser.parse(dbmlContent);
-//        Map<String, String> generatedFiles = new HashMap<>(); // Key: ClassName, Value: SourceCode
-//
-//        // 2. Duyệt qua tất cả các Schema
-//        Schema schema = db.getSchema("public");
-//            // 3. Duyệt qua tất cả các Table trong từng Schema
-//        for (Table table : schema.getTables()) {
-//
-//            // Tái sử dụng logic chuẩn bị dataModel cho từng table
-//            Map<String, Object> dataModel = prepareDataModel(table);
-//
-//            // Render code cho table hiện tại
-//            Template template = freemarkerConfig.getTemplate("entity.ftl");
-//            String sourceCode = FreeMarkerTemplateUtils.processTemplateIntoString(template, dataModel);
-//
-//            String className = StringUtils.capitalize(table.getName());
-//            generatedFiles.put(className, sourceCode);
-//        }
-//
-//        return generatedFiles;
-//    }
-
-    // Tách logic chuẩn bị dữ liệu ra hàm riêng để code sạch hơn
+    // split prepare data model logic into a separate function for cleaner code
     private Map<String, Object> prepareDataModel(Table table, Database db) {
         Map<String, Object> dataModel = new HashMap<>();
         dataModel.put("packageName", "com.example.demo");
@@ -129,6 +105,8 @@ public class CodeGenerator {
                 field.put("fieldName", toCamelCase(col.getName()));
                 field.put("javaType", javaType);
                 field.put("isId", col.getSettings().containsKey(ColumnSetting.PRIMARY_KEY));
+                field.put("unique", col.getSettings().containsKey(ColumnSetting.UNIQUE));
+                field.put("nullable", !col.getSettings().containsKey(ColumnSetting.NOT_NULL));
                 fields.add(field);
 
                 if (javaType.equals("BigDecimal") && !imports.contains("java.math.BigDecimal")) imports.add("java.math.BigDecimal");
@@ -163,36 +141,63 @@ public class CodeGenerator {
         return result.toString();
     }
 
-    // Hàm phụ trợ map kiểu dữ liệu DBML sang Java
+    // helper function to map dbml type to java
     private String mapSqlToJavaType(String sqlType) {
-        if (sqlType.equalsIgnoreCase("varchar")) return "String";
-        if (sqlType.equalsIgnoreCase("int")) return "Integer";
-        if (sqlType.equalsIgnoreCase("boolean") || sqlType.equalsIgnoreCase("bool")) return "Boolean";
-        if (sqlType.equalsIgnoreCase("datetime")) return "LocalDateTime";
-        return "String";
-    }
+        if (sqlType == null) return "Object";
 
-//    public byte[] generateProjectZip(Long projectId) throws Exception {
-//        Project project = designProjectRepository.findById(projectId).isPresent() ?
-//                designProjectRepository.findById(projectId).get() : null;
-//        if (project == null) {
-//            throw new IllegalArgumentException("Project với ID " + projectId + " không tồn tại.");
-//        }
-//
-//        Map<String, String> codeMap = generateAllEntities(DBMLCode.extractCleanDbmlCode(project.getRawDbmlCode()));
-//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//
-//        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-//            for (Map.Entry<String, String> entry : codeMap.entrySet()) {
-//                // Tạo file .java cho từng Entity
-//                ZipEntry ze = new ZipEntry("src/main/java/com/example/demo/entity/" + entry.getKey() + ".java");
-//                zos.putNextEntry(ze);
-//                zos.write(entry.getValue().getBytes());
-//                zos.closeEntry();
-//            }
-//        }
-//        return baos.toByteArray();
-//    }
+        // eliminate data type parameters (for example: varchar(255) -> varchar)
+        String baseType = sqlType.toLowerCase().split("\\(")[0].trim();
+
+        switch (baseType) {
+            case "varchar":
+            case "text":
+            case "char":
+            case "character varying":
+                return "String";
+
+            case "int":
+            case "integer":
+            case "serial":
+                return "Integer";
+            case "bigint":
+            case "bigserial":
+                return "Long";
+            case "smallint":
+                return "Short";
+
+            case "numeric":
+            case "decimal":
+                return "BigDecimal";
+            case "real":
+            case "float4":
+                return "Float";
+            case "double precision":
+            case "float8":
+                return "Double";
+
+            case "boolean":
+            case "bool":
+                return "Boolean";
+
+            case "date":
+                return "LocalDate";
+            case "timestamp":
+            case "timestamptz":
+            case "datetime":
+                return "LocalDateTime";
+            case "time":
+                return "LocalTime";
+
+            case "uuid":
+                return "UUID";
+            case "json":
+            case "jsonb":
+                return "String";
+
+            default:
+                return "String";
+        }
+    }
 
     public byte[] generateProjectZip(Long projectId) throws Exception {
         Project project = projectRepository.findById(projectId)
@@ -223,11 +228,11 @@ public class CodeGenerator {
      * Public helper to generate a simplified list of files (path + content) from DBML content.
      * This wrapper exists so callers outside this class don't need to reference the private GeneratedFile record.
      */
-    public List<java.util.Map<String, String>> generateFilesFromDbml(String dbmlContent) throws Exception {
+    public List<Map<String, String>> generateFilesFromDbml(String dbmlContent) throws Exception {
         List<GeneratedFile> files = generateAllSourceFiles(dbmlContent);
-        List<java.util.Map<String, String>> out = new ArrayList<>();
+        List<Map<String, String>> out = new ArrayList<>();
         for (GeneratedFile f : files) {
-            java.util.Map<String, String> m = new HashMap<>();
+            Map<String, String> m = new HashMap<>();
             m.put("path", f.path());
             m.put("content", f.content());
             out.add(m);
@@ -235,7 +240,6 @@ public class CodeGenerator {
         return out;
     }
 
-    // Thêm record phụ trợ bên trong hoặc ngoài class
     private record GeneratedFile(String path, String content) {}
 
     private List<GeneratedFile> generateAllSourceFiles(String dbmlContent) throws Exception {
@@ -248,16 +252,16 @@ public class CodeGenerator {
             Map<String, Object> dataModel = prepareDataModel(table, db);
             String className = (String) dataModel.get("className");
 
-            // 1. Render Entity
+            // render Entity
             files.add(renderFile("entity.ftl", dataModel, "entity/" + className + ".java"));
 
-            // 2. Render Repository
+            // 2. render Repository
             files.add(renderFile("repository.ftl", dataModel, "repository/" + className + "Repository.java"));
 
-            // 3. Render Service
+            // 3. render Service
             files.add(renderFile("service.ftl", dataModel, "service/" + className + "Service.java"));
 
-            // 4. Render Controller
+            // 4. render Controller
             files.add(renderFile("controller.ftl", dataModel, "controller/" + className + "Controller.java"));
         }
 
@@ -285,6 +289,11 @@ public class CodeGenerator {
         }
 
         // Relocate java source files to standard Maven layout
+
+        return getGeneratedFiles(files);
+    }
+
+    private static @NonNull List<GeneratedFile> getGeneratedFiles(List<GeneratedFile> files) {
         List<GeneratedFile> relocated = new ArrayList<>();
         for (GeneratedFile f : files) {
             String p = f.path();
@@ -297,7 +306,6 @@ public class CodeGenerator {
             }
             relocated.add(new GeneratedFile(p, f.content()));
         }
-
         return relocated;
     }
 }

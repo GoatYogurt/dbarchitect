@@ -1,45 +1,60 @@
 package ${packageName}.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.ToString;
+import lombok.*;
 import java.time.LocalDateTime;
+import java.util.List;
 <#list (imports)![] as import>
-import ${import};
+    import ${import};
 </#list>
 
 @Entity
 @Data
 @Table(name = "${tableName}")
 public class ${className} {
-    <#if hasIncrement>
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private ${idType} id;
-    </#if>
 
-    <#list fields as field>
+<#--check if idType exist then render the id field-->
+<#if idType??>
+    @Id
+    <#if hasIncrement!false>
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    </#if>
+    private ${idType} id;
+</#if>
+
+<#list fields as field>
+<#-- only render if this is not id field-->
     <#if !field.isId>
-    @Column(name = "${field.columnName}")
+    @Column(name = "${field.columnName}"<#if field.unique>, unique = true</#if><#if !field.nullable>, nullable = false</#if>)
     private ${field.javaType} ${field.fieldName};
     </#if>
-    </#list>
+</#list>
 
-    <#-- QUAN HỆ MANY-TO-ONE (Chứa FK) -->
-    <#list manyToOneRels as rel>
+<#-- many to one relationship list -->
+<#list manyToOneRels![] as rel>
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "${rel.joinColumn}")
+    @ToString.Exclude
     private ${rel.targetClass} ${rel.fieldName};
 
-    </#list>
-    <#-- QUAN HỆ ONE-TO-MANY (Danh sách con) -->
-    <#list oneToManyRels as rel>
+</#list>
+
+<#-- one to many relationship list -->
+<#list oneToManyRels![] as rel>
     @OneToMany(mappedBy = "${rel.mappedBy}", cascade = CascadeType.ALL)
     @ToString.Exclude
     private List<${rel.targetClass}> ${rel.fieldName};
-    </#list>
 
+</#list>
+
+<#-- Chỉ tạo getter/setter thủ công nếu không dùng Lombok hoặc cần ép kiểu -->
+<#if idType??>
     public void setId(${idType} id) {
-        this.id = id;
+    this.id = id;
     }
+
+    public ${idType} getId() {
+    return this.id;
+    }
+</#if>
 }
