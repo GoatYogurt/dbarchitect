@@ -9,3 +9,5 @@ class AgentState(TypedDict):
     pm_response: Optional[PMResponse]      # response from PM agent, including is_clear and questions if any
     answers: Annotated[List[dict], operator.add] # list of answers to PM questions, each answer is a dict with question and user response
     dbml_code: str         # the architect agent will write this based on specifications
+    project_id: Optional[str]  # optional project ID for tracking purposes
+    project_name: str  # project name

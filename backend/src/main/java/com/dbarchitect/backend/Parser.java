@@ -18,7 +18,7 @@ public class Parser {
         cu.findAll(MethodDeclaration.class).forEach(method ->
                 System.out.println("Method Name: " + method.getNameAsString()));
 
-        cu.getClassByName("DesignProject").ifPresent(cls -> {
+        cu.getClassByName("Project").ifPresent(cls -> {
             FieldDeclaration field = cls.addField("String", "newField", Modifier.Keyword.PRIVATE);
             field.addMarkerAnnotation("NotNull");
         });
@@ -30,6 +30,6 @@ public class Parser {
     }
 
     public static void main(String[] args) throws IOException {
-        analyzeController("D:\\CODING\\code\\kltn\\dbarchitect\\backend\\src\\main\\java\\com\\dbarchitect\\backend\\entities\\DesignProject.java");
+        analyzeController("D:\\CODING\\code\\kltn\\dbarchitect\\backend\\src\\main\\java\\com\\dbarchitect\\backend\\entities\\Project.java");
     }
 }

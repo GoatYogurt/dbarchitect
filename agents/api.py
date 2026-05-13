@@ -6,9 +6,10 @@ from pydantic import BaseModel
 from main import app as agent_graph
 from typing import List, Optional, Union
 from fastapi.middleware.cors import CORSMiddleware
-
+from sops.api import router as sops_router
 
 app = FastAPI()
+app.include_router(sops_router)
 
 class UserAnswer(BaseModel):
     question_text: str

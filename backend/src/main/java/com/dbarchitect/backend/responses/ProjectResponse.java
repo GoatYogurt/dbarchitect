@@ -5,7 +5,7 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class DesignProjectResponse {
+public class ProjectResponse {
     private Long projectId;
     private String projectName;
     private String cleanDbmlCode;

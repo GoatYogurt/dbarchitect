@@ -43,7 +43,7 @@ export default function App() {
   const [clarificationQuestions, setClarificationQuestions] = useState<ClarificationQuestion[]>([]);
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<number, string | string[]>>({});
   const [clarificationError, setClarificationError] = useState<string | null>(null);
-  const [conversationSeed, setConversationSeed] = useState<string>('');
+  const [conversationSeed, setConversationSeed] = useState<string>(''); // the initial prompt that started the conversation, used to maintain context across clarification rounds
 
   const {
     chatWithAgent,
@@ -54,7 +54,7 @@ export default function App() {
     error,
     updateDbml,
     downloadGeneratedCode,
-    fetchProjects,
+    fetchProjects
   } = useBackend();
 
   const isWorkspaceBusy = isCodeLoading || isDbmlUpdating || isLoadingProjects;
@@ -144,7 +144,7 @@ export default function App() {
     return payload;
   }, [clarificationAnswers, clarificationQuestions]);
 
-  const applyGeneratedDbml = useCallback((nextDbmlCode: string, assistantMessage: string) => {
+  const applyGeneratedDbml = useCallback(async (nextDbmlCode: string, assistantMessage: string) => {
     resetClarificationFlow();
     setDbmlCode(nextDbmlCode);
     setOriginalDbmlCode(nextDbmlCode);
@@ -250,6 +250,7 @@ export default function App() {
     setIsLoadingProjects(false);
   }, [fetchProjects]);
 
+  // when a project is selected from the project selector modal, we need to load its DBML into the editor and reset all related states
   const handleSelectProject = useCallback((project: Project) => {
     resetClarificationFlow();
     setProjectName(project.projectName);
