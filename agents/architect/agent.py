@@ -40,17 +40,18 @@ class ArchitectAgent:
         
         dbml_code = response.content
         
-        # Thực hiện Validate ngay tại Node hoặc dùng Conditional Edge
+        # validate the generated DBML code
         is_valid, error_msg = validate_dbml(dbml_code)
         
         if is_valid:
             return {
                 "dbml_code": dbml_code,
-                "error_message": None, # Xóa lỗi cũ nếu có
+                "error_message": None, # delete the old error message if validation passes
                 "iteration": state.get("iteration", 0) + 1
             }
         else:
             print(f"Validation failed: {error_msg}")
+            print(dbml_code)
             return {
                 "error_message": error_msg,
                 "iteration": state.get("iteration", 0) + 1

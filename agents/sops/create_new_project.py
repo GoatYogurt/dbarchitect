@@ -3,7 +3,6 @@ from product_manager.agent import ProductManagerAgent
 from architect.agent import ArchitectAgent
 from state import AgentState
 import requests
-import json
 
 class CreateNewProjectSOP:
     """SOP for creating a new project: PM → Architect → Save to Backend. 
@@ -30,7 +29,11 @@ class CreateNewProjectSOP:
             print(f"--- VALIDATION FAILED: RETRYING ({state['iteration']}/3) ---")
             return "retry"
         
-        print("--- VALIDATION SUCCESS OR MAX RETRIES REACHED ---")
+        if state.get("iteration", 0) >= 3:
+            print("--- MAX RETRIES REACHED ---")
+            return "end"
+
+        print("--- VALIDATION SUCCESS ---")
         return "save_project" # instead of end, save the project
     
     def save_project_to_backend(self, state: AgentState):
@@ -101,7 +104,8 @@ class CreateNewProjectSOP:
             self.should_continue_after_architect,
             {
                 "retry": "architect",
-                "save_project": "save_project"
+                "save_project": "save_project",
+                "end": END
             }
         )
         
