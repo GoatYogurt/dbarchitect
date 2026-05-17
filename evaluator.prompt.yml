@@ -29,6 +29,6 @@ messages:
   - role: user
     content: |-
       User input: {{user_input}}
-      Model output: {{modell_output}}
+      Model output: {{model_output}}
 model: openai/gpt-4o
 responseFormat: json_object
