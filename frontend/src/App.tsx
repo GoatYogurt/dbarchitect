@@ -9,7 +9,6 @@ import Loader from './components/Loader';
 import { CodeGenerationModal } from './components/CodeGenerationModal';
 import { CodeDownloadPopup } from './components/CodeDownloadPopup';
 import { ProjectSelectModal } from './components/ProjectSelectModal';
-import { CodeDiffModal } from './components/CodeDiffModal';
 
 const WELCOME_MESSAGE = 'Describe the system you want to model. I will ask for missing details and keep the DBML canvas in sync.';
 
@@ -32,7 +31,6 @@ export default function App() {
   const [parsedSchema, setParsedSchema] = useState<ParsedSchema>({ tables: [], refs: [] });
   const [generatedCode, setGeneratedCode] = useState<GeneratedFile[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
   const [isCodeModalOpen, setIsCodeModalOpen] = useState(false);
   const [isDownloadPopupOpen, setIsDownloadPopupOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -318,13 +316,6 @@ export default function App() {
         isSuccess={downloadSuccess}
       />
 
-      <CodeDiffModal
-        isOpen={isDiffModalOpen}
-        onClose={() => setIsDiffModalOpen(false)}
-        projectId={selectedProjectId}
-        newDbmlCode={dbmlCode}
-      />
-
       <ProjectSelectModal
         isOpen={isProjectSelectorOpen}
         onClose={() => setIsProjectSelectorOpen(false)}
@@ -396,14 +387,6 @@ export default function App() {
             >
               Download Code
             </button>
-            <button
-              onClick={() => setIsDiffModalOpen(true)}
-              disabled={isWorkspaceBusy || !selectedProjectId || !dbmlCode.trim() || !hasDbmlChanged}
-              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
-              title={hasDbmlChanged ? 'Compare changes' : 'Edit DBML to enable comparison'}
-            >
-              Compare Changes
-            </button>
           </div>
         </div>
       </div>
@@ -462,12 +445,9 @@ export default function App() {
               value={dbmlCode}
               onChange={setDbmlCode}
               onSave={handleSaveDbml}
-              onCompare={() => setIsDiffModalOpen(true)}
               onToggleCollapse={() => setIsEditorCollapsed(true)}
               isSaving={isDbmlUpdating}
-              isComparing={false}
               canSave={Boolean(selectedProjectId) && hasDbmlChanged}
-              canCompare={Boolean(selectedProjectId) && hasDbmlChanged}
             />
           </aside>
         )}
