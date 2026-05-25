@@ -1,6 +1,6 @@
-# dbarchitect
+# DBArchitect
 
-dbarchitect is an AI-assisted database design tool. It helps you turn natural-language requirements into DBML, visualize the schema, review the generated structure, and scaffold Spring Boot code from the final design.
+DBArchitect is an AI-assisted database design tool. It helps you turn natural-language requirements into DBML, visualize the schema, review the generated structure, and scaffold Spring Boot code from the final design.
 
 The project is split into three parts:
 
