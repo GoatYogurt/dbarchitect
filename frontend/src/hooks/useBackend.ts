@@ -1,6 +1,7 @@
 
+// this file is responsible for all interactions with the backend APIs
 import { useState, useCallback } from 'react';
-import { ClarificationAnswer, ClarificationQuestion, GeneratedFile, GenerateDbmlResponse, Project, FileNode, CodeChange } from '../types';
+import { ClarificationAnswer, ClarificationQuestion, GeneratedFile, GenerateDbmlResponse, Project, FileNode } from '../types';
 
 const JAVA_BACKEND_URL = 'http://localhost:8080';
 const PYTHON_BACKEND_URL = 'http://localhost:8000';
@@ -11,6 +12,7 @@ interface PythonChatResponse {
     is_clear?: boolean;
     questions?: ClarificationQuestion[] | null;
     dbml_code?: unknown;
+    projectId?: number;
   };
 }
 
@@ -48,6 +50,7 @@ export function useBackend() {
     return stored ? Number(stored) : null;
   });
 
+  // function to interact with Python backend to generate DBML code based on user requirements and any clarification answers
   const generateDbml = useCallback(async (requirements: string, projectName: string, answers: ClarificationAnswer[] = []): Promise<GenerateDbmlResponse | null> => {
     if (!requirements.trim()) {
       setError('Requirements cannot be empty.');
@@ -85,7 +88,7 @@ export function useBackend() {
         return {
           isClear: false,
           questions,
-          cleanDbmlCode: '',
+          cleanDbmlCode: ''
         };
       }
 
@@ -99,6 +102,7 @@ export function useBackend() {
         isClear: true,
         questions: [],
         cleanDbmlCode: dbml,
+        projectId: json.data?.projectId
       };
     } catch (e: any) {
       console.error('Backend DBML Generation Error:', e);
@@ -290,35 +294,5 @@ export function useBackend() {
     }
   }, []);
 
-  const compareCode = useCallback(async (oldCode: string, newCode: string): Promise<CodeChange[] | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Strip backticks from DBML code before sending to backend
-      const cleanOldCode = oldCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
-      const cleanNewCode = newCode.replace(/```dbml\n?/g, '').replace(/\n?```/g, '').trim();
-
-      const response = await fetch(`${JAVA_BACKEND_URL}/compare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldCode: cleanOldCode, newCode: cleanNewCode }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Backend error: ${response.status}`);
-      }
-
-      const changes: CodeChange[] = await response.json();
-      return changes;
-    } catch (e: any) {
-      console.error('Compare Code Error:', e);
-      setError(e.message || 'Failed to compare code.');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  return { generateDbml, chatWithAgent, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml, compareCode };
+  return { generateDbml, chatWithAgent, isLoading, generateSpringBootCode, isCodeLoading, isPreviewLoading, isDbmlUpdating, error, lastProjectId, fetchProjects, fetchProjectById, downloadGeneratedCode, generatePreview, updateDbml };
 }

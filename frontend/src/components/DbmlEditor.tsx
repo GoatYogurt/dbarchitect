@@ -10,7 +10,6 @@ interface DbmlEditorProps {
   onSave?: () => void;
   onToggleCollapse?: () => void;
   isSaving?: boolean;
-  isComparing?: boolean;
   canSave?: boolean;
 }
 
@@ -21,14 +20,14 @@ export function DbmlEditor({ value, onChange, onSave, onToggleCollapse, isSaving
 
   return (
     <div className="h-full bg-slate-800 rounded-lg shadow-inner flex flex-col overflow-hidden border border-slate-700">
-      <div className="flex items-center gap-2 p-3 bg-slate-900/50 border-b border-slate-700">
+      <div className="flex items-center gap-7 p-3 bg-slate-900/50 border-b border-slate-700">
         <CodeIcon className="w-5 h-5 text-emerald-400" />
         <h2 className="font-semibold text-slate-200">DBML Editor</h2>
         {onSave && (
           <button
             onClick={onSave}
             disabled={!canSave || isSaving}
-            className="ml-auto flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-emerald-500 text-white rounded-md shadow hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-75 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
+            className="ml-auto flex items-center gap-3 px-3 py-1.5 text-xs font-semibold bg-emerald-500 text-white rounded-md shadow hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-75 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
             aria-label="Save DBML changes"
           >
             {isSaving ? (

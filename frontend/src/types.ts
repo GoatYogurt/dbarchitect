@@ -49,7 +49,9 @@ export interface ClarificationAnswer {
   answer: string | string[];
 }
 
+// response from backend after generating DBML code, including any clarification questions and the cleaned DBML code
 export interface GenerateDbmlResponse {
+  projectId?: number; // optional project ID if the backend creates a new project
   isClear: boolean;
   questions: ClarificationQuestion[];
   cleanDbmlCode: string;
@@ -77,13 +79,4 @@ export interface PreviewResponse {
   children: FileNode[];
   content?: string | null;
   language?: string | null;
-}
-
-export interface CodeChange {
-  element: string;  // Name of the element (field, method, etc.)
-  type: string;     // Type (FIELD, METHOD, ANNOTATION)
-  action: string;   // ADDED, REMOVED, MODIFIED
-  detail: string;   // Description of the change
-  filePath?: string;
-  lineNumber?: number;
 }

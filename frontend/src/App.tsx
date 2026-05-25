@@ -142,11 +142,11 @@ export default function App() {
     return payload;
   }, [clarificationAnswers, clarificationQuestions]);
 
-  const applyGeneratedDbml = useCallback(async (nextDbmlCode: string, assistantMessage: string) => {
+  const applyGeneratedDbml = useCallback(async (projectId: number | null, dbmlCode: string, assistantMessage: string) => {
     resetClarificationFlow();
-    setDbmlCode(nextDbmlCode);
-    setOriginalDbmlCode(nextDbmlCode);
-    setSelectedProjectId(null);
+    setDbmlCode(dbmlCode);
+    setOriginalDbmlCode(dbmlCode);
+    setSelectedProjectId(projectId);
     setGeneratedCode([]);
     setChatMessages((prev) => [...prev, createChatMessage('assistant', assistantMessage)]);
   }, [resetClarificationFlow]);
@@ -175,7 +175,8 @@ export default function App() {
       return;
     }
 
-    applyGeneratedDbml(response.cleanDbmlCode, 'DBML generated and rendered in the canvas.');
+    // project id can be null if the backend decides not to create a project until after clarifications are answered
+    applyGeneratedDbml(response.projectId || null, response.cleanDbmlCode, 'DBML generated and rendered in the canvas.');
   }, [applyGeneratedDbml, chatPrompt, chatWithAgent, clarificationQuestions.length, projectName]);
 
   const handleSubmitClarifications = useCallback(async () => {
@@ -200,7 +201,7 @@ export default function App() {
       return;
     }
 
-    applyGeneratedDbml(response.cleanDbmlCode, 'DBML generated from your answers and rendered in the canvas.');
+    applyGeneratedDbml(response.projectId || null, response.cleanDbmlCode, 'DBML generated from your answers and rendered in the canvas.');
   }, [applyGeneratedDbml, buildClarificationPayload, chatWithAgent, clarificationQuestions.length, conversationSeed, projectName]);
 
   const handleScaffoldCode = useCallback(async () => {
