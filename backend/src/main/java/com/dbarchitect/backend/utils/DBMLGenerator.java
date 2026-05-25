@@ -18,9 +18,7 @@ public class DBMLGenerator {
 
     private String generateMockDbml(String systemDescription) {
         return """
-            ```dbml
-            // Mock DBML generated locally for: """ + systemDescription.substring(0, Math.min(systemDescription.length(), 50)) + """...
-            
+            ```dbml            
             Table Users {
               id INT [pk, increment]
               username VARCHAR(50) [unique, not null]

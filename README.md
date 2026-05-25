@@ -32,7 +32,7 @@ If you want to use different values, update `backend/src/main/resources/applicat
 
 Here's how to run locally:
 ```bash
-sudo -u postgres psql -c "CREATE ROLE admin WITH LOGIN PASSWORD ’admin123’;"
+sudo -u postgres psql -c "CREATE ROLE admin WITH LOGIN PASSWORD 'admin123';"
 sudo -u postgres psql -c "CREATE DATABASE dbarchitect OWNER admin;"
 ```
 
