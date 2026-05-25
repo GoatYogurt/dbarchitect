@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:14
+    container_name: dbarchitect-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: dbarchitect
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d dbarchitect"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: dbarchitect-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dbarchitect
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+    ports:
+      - "8080:8080"
+
+  agents:
+    build:
+      context: ./agents
+    container_name: dbarchitect-agents
+    depends_on:
+      - backend
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: dbarchitect-frontend
+    depends_on:
+      - backend
+      - agents
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:

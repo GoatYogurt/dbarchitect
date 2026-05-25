@@ -1,0 +1,23 @@
+# CẤM COPY THƯ MỤC NÀY (Để Docker tự chạy npm install/npm ci sinh ra bản Linux)
+node_modules/
+
+dist/
+build/
+.next/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+.vscode/
+.idea/
+.git
+.gitignore
+.DS_Store

@@ -4,7 +4,6 @@ import { ClarificationAnswer, ClarificationQuestion, GeneratedFile, GenerateDbml
 
 const JAVA_BACKEND_URL = 'http://localhost:8080';
 const PYTHON_BACKEND_URL = 'http://localhost:8000';
-// const BASE_URL = "https://x7nbr74s-8080.asse.devtunnels.ms"
 
 interface PythonChatResponse {
   status?: string;

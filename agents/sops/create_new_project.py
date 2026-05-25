@@ -11,7 +11,7 @@ class CreateNewProjectSOP:
     def __init__(self):
         self.pm_agent = ProductManagerAgent()
         self.architect_agent = ArchitectAgent()
-        self.java_backend_url = "http://localhost:8080" # TODO: make this configurable
+        self.java_backend_url = "http://backend:8080" # TODO: make this configurable
     
     def should_continue_after_pm(self, state: AgentState):
         """Check if PM clarifications are clear"""

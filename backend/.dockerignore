@@ -1,0 +1,17 @@
+target/
+bin/
+.gradle/
+
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+.env
+application-local.properties
+
+.git
+.gitignore
+.DS_Store
