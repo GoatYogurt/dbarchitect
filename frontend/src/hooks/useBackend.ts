@@ -12,7 +12,7 @@ interface PythonChatResponse {
     is_clear?: boolean;
     questions?: ClarificationQuestion[] | null;
     dbml_code?: unknown;
-    projectId?: number;
+    project_id?: number;
   };
 }
 
@@ -102,7 +102,7 @@ export function useBackend() {
         isClear: true,
         questions: [],
         cleanDbmlCode: dbml,
-        projectId: json.data?.projectId
+        projectId: json.data?.project_id
       };
     } catch (e: any) {
       console.error('Backend DBML Generation Error:', e);
