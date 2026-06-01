@@ -1,14 +1,14 @@
 import { Monaco } from '@monaco-editor/react';
 
 /**
- * Register the DBML language in Monaco Editor
+ * register the DBML language in Monaco Editor
  * DBML (Database Markup Language) is a simple, readable DSL language designed to define database structures
  */
 export const registerDBMLLanguage = (monaco: Monaco) => {
-  // Register the language
+  // register the language
   monaco.languages.register({ id: 'dbml' });
 
-  // Define the tokenizer rules for syntax highlighting
+  // define the tokenizer rules for syntax highlighting
   monaco.languages.setMonarchTokensProvider('dbml', {
     ignoreCase: true,
     defaultToken: 'invalid',

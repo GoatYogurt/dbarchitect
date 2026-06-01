@@ -77,13 +77,13 @@ public class MainService {
 
     public FileNode generateProjectPreview(Long projectId) {
         try {
-            // Tải dự án từ DB
+            // load project from DB
             Project project = projectRepository.findById(projectId).orElse(null);
             if (project == null) {
                 return null;
             }
 
-            // Giả mã DBML và tạo cây tệp
+            // generate ZIP bytes for the project and build a file tree from it
             byte[] projectZip = codeGenerator.generateProjectZip(projectId);
             return ProjectTreeBuilder.buildTreeFromZip(projectZip, project.getName());
         } catch (Exception e) {

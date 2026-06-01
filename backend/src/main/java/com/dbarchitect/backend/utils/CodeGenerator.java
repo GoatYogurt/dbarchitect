@@ -34,7 +34,7 @@ public class CodeGenerator {
         this.projectRepository = projectRepository;
     }
 
-    // split prepare data model logic into a separate function for cleaner code
+    // hàm phụ trợ để chuẩn bị data model cho Freemarker template dựa trên thông tin của Table và toàn bộ Database (để detect quan hệ)
     private Map<String, Object> prepareDataModel(Table table, Database db) {
         Map<String, Object> dataModel = new HashMap<>();
         dataModel.put("packageName", "com.example.demo");
@@ -42,7 +42,8 @@ public class CodeGenerator {
         String className = StringUtils.capitalize(table.getName());
         dataModel.put("className", className);
 
-        // Xác định ID Type cho Repository/Service
+        // detect if there's a primary key column and if it has auto-increment, to 
+        // determine if should add @GeneratedValue and what type the ID field should be
         Column idCol = table.getColumns().stream()
                 .filter(col -> col.getSettings().containsKey(ColumnSetting.PRIMARY_KEY))
                 .findFirst()
@@ -59,7 +60,7 @@ public class CodeGenerator {
         List<Map<String, Object>> manyToOneRels = new ArrayList<>();
         List<Map<String, Object>> oneToManyRels = new ArrayList<>();
 
-        // 1. Lấy danh sách các cột Khóa ngoại (FK) để tránh gen trùng field cơ bản
+        // Lấy danh sách các cột Khóa ngoại (FK) để tránh gen trùng field cơ bản
         List<String> fkColumnNames = new ArrayList<>();
 
         // 2. Duyệt quan hệ trong toàn bộ Database
@@ -242,6 +243,9 @@ public class CodeGenerator {
 
     private record GeneratedFile(String path, String content) {}
 
+    /**
+     * hàm chính để tạo source code từ dbml
+     */
     private List<GeneratedFile> generateAllSourceFiles(String dbmlContent) throws Exception {
         System.out.println(dbmlContent);
         Database db = DbmlParser.parse(dbmlContent);
@@ -249,7 +253,10 @@ public class CodeGenerator {
         Schema schema = db.getSchema("public");
 
         for (Table table : schema.getTables()) {
+            // chuẩn bị data model cho từng table
             Map<String, Object> dataModel = prepareDataModel(table, db);
+
+
             String className = (String) dataModel.get("className");
 
             // render Entity
@@ -265,7 +272,7 @@ public class CodeGenerator {
             files.add(renderFile("controller.ftl", dataModel, "controller/" + className + "Controller.java"));
         }
 
-        // Add static project-level files (predefined, no templating) from classpath: static-templates
+        // thêm các file tĩnh như pom.xml, Dockerfile, mvnw,... vào output (đọc từ resources/static-templates)
         String[][] staticFiles = new String[][]{
                 {"static-templates/pom.xml", "pom.xml"},
                 {"static-templates/mvnw", "mvnw"},

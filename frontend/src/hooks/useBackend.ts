@@ -16,12 +16,13 @@ interface PythonChatResponse {
   };
 }
 
+// helper function to clean up DBML code returned from the backend, removing any markdown code block formatting and trimming whitespace
 function normalizeDbmlCode(rawDbml: string): string {
   return rawDbml
-    .replace(/^```dbml\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```\s*$/i, '')
-    .trim();
+    .replace(/^```dbml\s*/i, '') // remove opening ```dbml code block if present
+    .replace(/^```\s*/i, '') // remove opening ``` code block if present (in case backend doesn't specify language)
+    .replace(/\s*```\s*$/i, '') // remove closing ``` code block if present
+    .trim(); // trim leading/trailing whitespace
 }
 
 function extractDbmlCode(dbmlPayload: unknown): string {
@@ -56,6 +57,7 @@ export function useBackend() {
       setError('Requirements cannot be empty.');
       return null;
     }
+
     if (!projectName.trim()) {
       setError('Project name cannot be empty.');
       return null;

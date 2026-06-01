@@ -5,8 +5,11 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.List;
 <#list (imports)![] as import>
-    import ${import};
+import ${import};
 </#list>
+<#if idType?? && idType == "UUID">
+import java.util.UUID;
+</#if>
 
 @Entity
 @Data
@@ -50,11 +53,11 @@ public class ${className} {
 <#-- Chỉ tạo getter/setter thủ công nếu không dùng Lombok hoặc cần ép kiểu -->
 <#if idType??>
     public void setId(${idType} id) {
-    this.id = id;
+        this.id = id;
     }
 
     public ${idType} getId() {
-    return this.id;
+        return this.id;
     }
 </#if>
 }

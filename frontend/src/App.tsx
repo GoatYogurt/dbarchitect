@@ -107,6 +107,7 @@ export default function App() {
     setClarificationError(null);
   }, []);
 
+  // function to build the payload of clarification answers to send back to the backend, including validation to ensure all questions are answered appropriately based on their type
   const buildClarificationPayload = useCallback((): ClarificationAnswer[] | null => {
     const payload: ClarificationAnswer[] = [];
 
@@ -142,24 +143,28 @@ export default function App() {
     return payload;
   }, [clarificationAnswers, clarificationQuestions]);
 
+  // function to apply the generated DBML code to the editor and update the chat with a new assistant message, used after both the initial generation and after clarifications are submitted
   const applyGeneratedDbml = useCallback(async (projectId: number | null, dbmlCode: string, assistantMessage: string) => {
     resetClarificationFlow();
     setDbmlCode(dbmlCode);
-    setOriginalDbmlCode(dbmlCode);
+    setOriginalDbmlCode(dbmlCode); // TODO: removed comparison feature -> remove originalDbmlCode state as well 
     setSelectedProjectId(projectId);
     setGeneratedCode([]);
     setChatMessages((prev) => [...prev, createChatMessage('assistant', assistantMessage)]);
   }, [resetClarificationFlow]);
 
+  // handle sending the initial prompt to the backend and processing the response
   const handleSendPrompt = useCallback(async () => {
     const prompt = chatPrompt.trim();
+
+    // prevent sending if prompt is empty, project name is empty, or there are pending clarification questions (user needs to answer those first)
     if (!prompt || !projectName.trim() || clarificationQuestions.length > 0) {
       return;
     }
 
-    setClarificationError(null);
-    setChatMessages((prev) => [...prev, createChatMessage('user', prompt)]);
-    setConversationSeed(prompt);
+    setClarificationError(null); // clear any existing clarification errors
+    setChatMessages((prev) => [...prev, createChatMessage('user', prompt)]); // add user's prompt to chat history
+    setConversationSeed(prompt); // set the conversation seed to the initial prompt
 
     const response = await chatWithAgent(prompt, projectName, []);
     if (!response) {
@@ -168,6 +173,7 @@ export default function App() {
 
     setChatPrompt('');
 
+    // if the backend indicates that the input is not clear enough to generate DBML, show the clarification questions and wait for the user to answer them before proceeding
     if (!response.isClear) {
       setClarificationQuestions(response.questions);
       setClarificationAnswers({});
@@ -179,6 +185,7 @@ export default function App() {
     applyGeneratedDbml(response.projectId || null, response.cleanDbmlCode, 'DBML generated and rendered in the canvas.');
   }, [applyGeneratedDbml, chatPrompt, chatWithAgent, clarificationQuestions.length, projectName]);
 
+  // handle submitting answers to clarification questions, sending them back to the backend, and processing the response which should include the final DBML code if the clarifications were sufficient
   const handleSubmitClarifications = useCallback(async () => {
     if (!conversationSeed || clarificationQuestions.length === 0 || !projectName.trim()) {
       return;
@@ -194,6 +201,7 @@ export default function App() {
       return;
     }
 
+    // if the backend indicates that the clarifications are not clear enough to generate DBML, show the clarification questions and wait for the user to answer them before proceeding
     if (!response.isClear) {
       setClarificationQuestions(response.questions);
       setClarificationAnswers({});

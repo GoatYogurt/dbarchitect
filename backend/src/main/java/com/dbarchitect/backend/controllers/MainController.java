@@ -58,12 +58,12 @@ public class MainController {
     }
 
     // unused
-    @PostMapping("/compare")
-    public ResponseEntity<List<FileDiff>> getDiff(@RequestBody CompareRequest req) throws Exception {
-        // req chứa oldCode và newCode
-        List<FileDiff> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
-        return ResponseEntity.ok(diffResults);
-    }
+    // @PostMapping("/compare")
+    // public ResponseEntity<List<FileDiff>> getDiff(@RequestBody CompareRequest req) throws Exception {
+    //     // req chứa oldCode và newCode
+    //     List<FileDiff> diffResults = mainService.compareCode(req.getProjectId(), req.getNewDbmlCode());
+    //     return ResponseEntity.ok(diffResults);
+    // }
 
     // endpoint to generate Java code files from DBML code, returns a list of file metadata and content
     @PostMapping("/generate-java-code")
