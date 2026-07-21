@@ -18,6 +18,7 @@ class CreateNewProjectSOP:
         decision = state["pm_response"].is_clear
         if decision is True:
             print("--- DECISION: PROCEED TO ARCHITECT ---")
+            print(f"Specifications: {state['pm_response'].spec}")
             return "architect"
         else:
             print("--- DECISION: NEED CLARIFICATION ---")
